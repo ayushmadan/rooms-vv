@@ -121,22 +121,39 @@ function createLoadingWindow() {
   `)}`);
 }
 
-function checkBackendReady(retries = 30) {
+function checkBackendReady(retries = 90, interval = 2000) {
   return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const maxAttempts = retries;
+
     const attempt = () => {
+      attempts++;
       http.get('http://localhost:4000', (res) => {
         console.log('Backend is ready!');
         resolve();
       }).on('error', (err) => {
         if (retries > 0) {
-          console.log(`Backend not ready yet, retrying... (${retries} attempts left)`);
+          const elapsed = ((maxAttempts - retries) * interval) / 1000;
+          console.log(`Backend not ready yet (${Math.floor(elapsed)}s elapsed, ${retries} retries left)...`);
+
+          // Update loading window status
+          if (loadingWindow && !loadingWindow.isDestroyed()) {
+            let status = 'Starting MongoDB and server...';
+            if (elapsed > 30) status = 'MongoDB is starting (this may take a minute)...';
+            if (elapsed > 60) status = 'Almost ready, please wait...';
+
+            loadingWindow.webContents.executeJavaScript(`
+              document.querySelector('.status').textContent = '${status}';
+            `).catch(() => {});
+          }
+
           setTimeout(() => {
             retries--;
             attempt();
-          }, 1000);
+          }, interval);
         } else {
-          console.error('Backend failed to start after 30 seconds');
-          reject(new Error('Backend failed to start'));
+          console.error(`Backend failed to start after ${(maxAttempts * interval) / 1000} seconds`);
+          reject(new Error('Backend failed to start. MongoDB may not be installed or port 4000 is in use.'));
         }
       });
     };
@@ -183,14 +200,18 @@ async function createWindow() {
       loadingWindow.close();
     }
 
+    const errorDetails = err.message || 'Unknown error';
     dialog.showErrorBox(
-      'Startup Error',
-      'Failed to start Vira Villas Rooms.\n\n' +
-      'Please ensure:\n' +
-      '1. MongoDB is installed and running\n' +
-      '2. Port 4000 is not in use\n' +
-      '3. Dependencies are installed (run: npm install)\n\n' +
-      'The application will now close.'
+      'Vira Villas Rooms - Startup Failed',
+      `The application failed to start after 3 minutes.\n\n` +
+      `Error: ${errorDetails}\n\n` +
+      `Common solutions:\n` +
+      `1. Restart your computer to clear port 4000\n` +
+      `2. Run the application as Administrator\n` +
+      `3. Check Windows Firewall settings\n` +
+      `4. Manually install MongoDB from mongodb.com\n\n` +
+      `If this persists, please contact support.\n\n` +
+      `The application will now close.`
     );
     app.quit();
   }
