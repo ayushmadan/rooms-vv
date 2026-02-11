@@ -1,0 +1,62 @@
+{
+  "name": "rooms-vv",
+  "version": "0.1.0",
+  "description": "Offline-first room allocation desktop app",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:electron\"",
+    "dev:backend": "nodemon app/backend/src/index.js",
+    "dev:electron": "wait-on tcp:4000 && electron .",
+    "start": "node app/backend/src/index.js",
+    "build:msi": "electron-builder --win msi",
+    "build:mac": "electron-builder --mac",
+    "backup:run": "node app/backend/src/services/backup.service.js"
+  },
+  "build": {
+    "appId": "com.viravillas.rooms",
+    "productName": "Vira Villas Rooms",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "app/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "csv-writer": "^1.6.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "electron-is-dev": "^3.0.1",
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0",
+    "mongoose": "^8.10.1",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "pdfkit": "^0.17.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^34.0.2",
+    "electron-builder": "^25.1.8",
+    "nodemon": "^3.1.9",
+    "wait-on": "^8.0.2"
+  }
+}

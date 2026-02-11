@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vira Villas Rooms Desk</title>
+    <link rel="icon" type="image/png" href="/assets/logo.png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg"></div>
+    <main class="app">
+      <header class="card topbar">
+        <div class="brand">
+          <img src="/assets/logo.png" alt="Vira Villas Rooms" class="logo" />
+          <div>
+            <h1>Vira Villas Rooms</h1>
+            <p>Local Reservation, Billing, Payments and Ledger</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="seedRoomsBtn" class="btn btn-outline">Seed Inventory</button>
+          <label>Role
+            <select id="roleSelect">
+              <option value="STAFF">Staff</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          </label>
+          <label>Admin PIN
+            <input id="adminPin" type="password" placeholder="PIN" />
+          </label>
+          <span id="adminState" class="badge warn">Admin Locked</span>
+        </div>
+      </header>
+
+      <nav class="card tabbar" id="mainTabs">
+        <button class="tab-btn active" data-tab-target="booking">Booking</button>
+        <button class="tab-btn" data-tab-target="operations">Operations</button>
+        <button class="tab-btn" data-tab-target="billing">Billing</button>
+        <button class="tab-btn" data-tab-target="admin">Admin</button>
+        <button class="tab-btn" data-tab-target="backups">Backups</button>
+      </nav>
+
+      <section class="tab-panel active" data-tab-panel="booking">
+        <section class="card panel">
+          <h2>New Booking</h2>
+          <p class="muted">Check-in: 12:00 PM IST | Check-out: 11:00 AM IST</p>
+
+          <div class="row row-3">
+            <label>Check-in Date <input type="date" id="fromDate" /></label>
+            <label>Check-out Date <input type="date" id="toDate" /></label>
+            <button id="searchBtn" class="btn">Search Availability</button>
+          </div>
+
+          <div class="chip-group" id="floorFilterGroup">
+            <label><input type="radio" name="floorFilter" value="ALL" checked /> All</label>
+            <label><input type="radio" name="floorFilter" value="1" /> 1st Floor</label>
+            <label><input type="radio" name="floorFilter" value="2" /> 2nd Floor</label>
+            <label><input type="radio" name="floorFilter" value="PARTY_HALL" /> Party Hall</label>
+            <label><input type="radio" name="floorFilter" value="DINING_HALL" /> Dining Hall</label>
+          </div>
+
+          <div id="roomsGrid" class="rooms-grid"></div>
+
+          <div class="subgrid">
+            <section>
+              <h3>Selected Tile Bookings (Range)</h3>
+              <div id="roomBookingsList" class="booking-card-list"></div>
+            </section>
+            <section>
+              <h3>Live Quote</h3>
+              <div id="quoteBox" class="quote"></div>
+            </section>
+          </div>
+
+          <form id="bookingForm" class="booking-form" enctype="multipart/form-data">
+            <h3>Customer</h3>
+            <div class="stack-inline">
+              <button type="button" id="copyCustomerBtn" class="btn btn-outline">Copy Customer Details</button>
+              <button type="button" id="pasteCustomerBtn" class="btn btn-outline">Paste Customer Details</button>
+            </div>
+            <div class="row row-2">
+              <label>Full Name <input name="fullName" required /></label>
+              <label>Phone <input name="phone" required /></label>
+              <label>Email <input name="email" type="email" /></label>
+              <label>Address <input name="address" /></label>
+            </div>
+            <label>Photo ID Upload <input name="photoId" type="file" accept="image/*" required /></label>
+
+            <div class="sub-title">ID Type</div>
+            <div class="chip-group" id="idTypeGroup">
+              <label><input type="radio" name="idTypeRadio" value="AADHAAR" checked /> Aadhaar</label>
+              <label><input type="radio" name="idTypeRadio" value="PASSPORT" /> Passport</label>
+              <label><input type="radio" name="idTypeRadio" value="DRIVING_LICENSE" /> Driving License</label>
+              <label><input type="radio" name="idTypeRadio" value="VOTER_ID" /> Voter ID</label>
+              <label><input type="radio" name="idTypeRadio" value="OTHER" /> Other</label>
+            </div>
+            <label id="idTypeOtherWrap" class="hidden">Other ID Type <input id="idTypeOther" /></label>
+            <label>ID Number <input name="idNumber" required /></label>
+
+            <h3>Pricing & Meals</h3>
+            <div class="row row-3">
+              <label>Selected Units <input id="selectedUnitText" readonly placeholder="Select one or more tiles" /></label>
+              <label>Rent / Night (Rs) <input id="nightlyRent" type="number" min="0" step="1" required /></label>
+              <label>Payment Mode
+                <select id="paymentMode">
+                  <option value="UPI">UPI</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CREDIT_CARD">Credit Card</option>
+                  <option value="DEBIT_CARD">Debit Card</option>
+                </select>
+              </label>
+            </div>
+            <div class="row row-2">
+              <label>Advance Collected (Rs) <input id="advancePaid" type="number" min="0" step="1" value="0" /></label>
+              <label>Notes <input id="bookingNotes" /></label>
+            </div>
+
+            <div class="sub-title">Meal Planner by Date</div>
+            <div id="mealPlanner" class="meal-planner"></div>
+
+            <input type="hidden" id="roomIdField" />
+            <button type="submit" class="btn">Create Booking</button>
+          </form>
+          <p id="bookingStatus" class="status"></p>
+        </section>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="operations">
+        <div class="two-col">
+          <section class="card panel">
+            <h2>Booking Actions</h2>
+            <div class="row row-2">
+              <label>From Date <input id="opFromDate" type="date" /></label>
+              <label>To Date <input id="opToDate" type="date" /></label>
+            </div>
+            <div id="opRoomsGrid" class="rooms-grid compact"></div>
+            <h3>Bookings In Selected Range/Room</h3>
+            <div id="opBookingList" class="booking-card-list"></div>
+            <label>Selected Booking ID <input id="manageBookingId" placeholder="Select from list/table" readonly /></label>
+            <div class="row row-2">
+              <label>Move To Room/Hall ID <input id="moveRoomId" /></label>
+              <label>Move Rent / Night (Rs) <input id="moveRent" type="number" min="0" step="1" /></label>
+              <label>Move Check-in <input id="moveCheckIn" type="date" /></label>
+              <label>Move Check-out <input id="moveCheckOut" type="date" /></label>
+            </div>
+            <div class="stack">
+              <button id="moveBookingBtn" class="btn">Move Booking</button>
+              <button id="cancelBookingBtn" class="btn btn-outline danger">Cancel Booking</button>
+            </div>
+
+            <div class="stack split-top">
+              <button id="checkInBtn" class="btn">Mark Check-in</button>
+              <button id="checkOutBtn" class="btn">Mark Check-out</button>
+              <button id="cleanedBtn" class="btn">Mark Cleaned</button>
+            </div>
+
+            <h3>Payments</h3>
+            <div class="row row-2">
+              <label>Amount (Rs) <input id="paymentAmount" type="number" min="0" step="1" value="0" /></label>
+              <label>Mode
+                <select id="paymentModeUpdate">
+                  <option value="UPI">UPI</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CREDIT_CARD">Credit Card</option>
+                  <option value="DEBIT_CARD">Debit Card</option>
+                </select>
+              </label>
+              <label>Type
+                <select id="paymentType">
+                  <option value="ADVANCE">Advance</option>
+                  <option value="SETTLEMENT">Settlement</option>
+                  <option value="REFUND">Refund</option>
+                </select>
+              </label>
+              <label>Note <input id="paymentNote" /></label>
+            </div>
+            <div class="stack">
+              <button id="addPaymentBtn" class="btn">Record Payment</button>
+              <button id="markBillPaidBtn" class="btn btn-outline">Mark Bill Paid</button>
+            </div>
+            <p id="manageStatus" class="status"></p>
+          </section>
+
+          <section class="card panel">
+            <h2>Bookings (IST)</h2>
+            <div class="table-wrap">
+              <table id="bookingsTable">
+                <thead>
+                  <tr>
+                    <th>Booking ID</th>
+                    <th>Customer</th>
+                    <th>Unit</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Due</th>
+                    <th>Paid</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="pager">
+              <button id="opsPrevBtn" class="btn btn-outline" type="button">Previous</button>
+              <span id="opsPageInfo">Page 1</span>
+              <button id="opsNextBtn" class="btn btn-outline" type="button">Next</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="billing">
+        <section class="card panel narrow">
+          <h2>Billing</h2>
+          <label>Booking ID <input id="billingBookingId" /></label>
+          <div class="sub-title">Extra Item Label</div>
+          <div class="chip-group">
+            <label><input type="radio" name="extraLabelRadio" value="Food" checked /> Food</label>
+            <label><input type="radio" name="extraLabelRadio" value="Laundry" /> Laundry</label>
+            <label><input type="radio" name="extraLabelRadio" value="Service" /> Service</label>
+            <label><input type="radio" name="extraLabelRadio" value="Other" /> Other</label>
+          </div>
+          <label id="extraOtherWrap" class="hidden">Other Label <input id="extraOtherLabel" /></label>
+          <label>Amount (Rs) <input id="extraAmount" type="number" min="0" step="1" value="0" /></label>
+          <div class="stack">
+            <button id="generateBillBtn" class="btn">Generate Bill PDF</button>
+            <button id="openBillBtn" class="btn btn-outline">Open/Print Bill</button>
+            <button id="declarationBtn" class="btn btn-outline">Open/Print Declaration</button>
+          </div>
+          <p id="billStatus" class="status"></p>
+        </section>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="admin">
+        <div class="two-col">
+          <section class="card panel" id="adminConfigPanel">
+            <h2>Admin Pricing & GST</h2>
+            <div class="row row-2">
+              <label>Default Small <input id="defSmall" type="number" min="0" /></label>
+              <label>Default Big <input id="defBig" type="number" min="0" /></label>
+              <label>Default Party Hall <input id="defParty" type="number" min="0" /></label>
+              <label>Default Dining Hall <input id="defDining" type="number" min="0" /></label>
+              <label>Default Meal Addon/day <input id="defMeal" type="number" min="0" /></label>
+              <label>GST % (inclusive) <input id="defGst" type="number" min="0" step="0.01" /></label>
+            </div>
+            <button id="saveDefaultsBtn" class="btn">Save Default Config</button>
+
+            <h3>Specific Date Overrides</h3>
+            <div class="row row-2">
+              <label>Unit ID <input id="configRoomId" /></label>
+              <label>Date <input id="configDate" type="date" /></label>
+              <label>Unit Rent (Rs) <input id="configRent" type="number" min="0" /></label>
+              <label>Meal Addon/day (Rs) <input id="configMealRate" type="number" min="0" /></label>
+            </div>
+            <button id="saveRateBtn" class="btn">Save Date Overrides</button>
+            <p id="configStatus" class="status"></p>
+          </section>
+
+          <section class="card panel" id="customerEditPanel">
+            <h2>Admin Past Customer Edit</h2>
+            <label>Customer ID <input id="editCustomerId" /></label>
+            <label>Full Name <input id="editCustomerName" /></label>
+            <label>Phone <input id="editCustomerPhone" /></label>
+            <button id="saveCustomerBtn" class="btn">Update Customer</button>
+            <p id="customerEditStatus" class="status"></p>
+
+            <h2 class="top-gap">Admin Ledger</h2>
+            <section id="ledgerPanel">
+              <div class="row row-2">
+                <label>From <input id="ledgerFrom" type="date" /></label>
+                <label>To <input id="ledgerTo" type="date" /></label>
+              </div>
+              <button id="loadLedgerBtn" class="btn">Load Ledger Report</button>
+              <pre id="ledgerSummary" class="quote"></pre>
+              <div id="ledgerRows" class="list-box"></div>
+              <p id="ledgerStatus" class="status"></p>
+            </section>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="backups">
+        <section class="card panel narrow">
+          <h2>Backups</h2>
+          <div class="row row-2">
+            <label>From Date <input type="date" id="backupFrom" /></label>
+            <label>To Date <input type="date" id="backupTo" /></label>
+          </div>
+          <button id="exportBackupBtn" class="btn">Create Backup CSV</button>
+          <p id="backupStatus" class="status"></p>
+          <div class="sub-title">Upload Selected CSV to Google Drive</div>
+          <div id="backupFiles" class="list-box"></div>
+          <button id="uploadSelectedBtn" class="btn btn-outline">Upload Selected Files</button>
+          <p id="uploadStatus" class="status"></p>
+        </section>
+      </section>
+    </main>
+
+    <div id="feedbackModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h3 id="feedbackTitle">Status</h3>
+        <p id="feedbackMessage"></p>
+        <button id="feedbackCloseBtn" class="btn" type="button">Close</button>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+app/backend/uploads/*
+app/backend/output/bills/*
+app/backend/output/backups/*
+!app/backend/uploads/.gitkeep
+!app/backend/output/bills/.gitkeep
+!app/backend/output/backups/.gitkeep
