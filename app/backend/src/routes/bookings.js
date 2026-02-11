@@ -47,24 +47,27 @@ router.get('/availability', async (req, res, next) => {
     const from = parseIstCheckIn(fromDate);
     const to = parseIstCheckOut(toDate);
 
-    const [rooms, bookings] = await Promise.all([
+    const [rooms, activeBookings, checkedOutBookings] = await Promise.all([
       Room.find({ active: true }).lean(),
-      Booking.find({ status: { $in: ['BOOKED', 'CHECKED_IN'] } }).lean()
+      Booking.find({ status: { $in: ['BOOKED', 'CHECKED_IN'] } }).lean(),
+      Booking.find({ status: 'CHECKED_OUT' }).lean()
     ]);
 
     const data = rooms.map((room) => {
-      const matching = bookings.filter(
+      const matchingActive = activeBookings.filter(
         (b) => String(b.roomId) === String(room._id) && overlaps(from, to, new Date(b.checkInDate), new Date(b.checkOutDate))
       );
-      const needsCleaning = bookings.some((b) => String(b.roomId) === String(room._id) && b.status === 'CHECKED_OUT');
+      const checkedInBookings = matchingActive.filter((b) => b.status === 'CHECKED_IN');
+      const needsCleaning = checkedOutBookings.some((b) => String(b.roomId) === String(room._id));
 
       return {
         roomId: room._id,
         code: room.code,
         floor: room.floor,
         size: room.size,
-        available: matching.length === 0,
-        occupancyCount: matching.length,
+        available: matchingActive.length === 0,
+        occupancyCount: matchingActive.length,
+        checkedInCount: checkedInBookings.length,
         needsCleaning
       };
     });
@@ -109,14 +112,15 @@ router.get('/room-bookings', async (req, res, next) => {
 
 router.post('/quote', async (req, res, next) => {
   try {
-    const { roomId, checkInDate, checkOutDate, mealPlan, mealSchedule, nightlyBaseOverride } = req.body;
+    const { roomId, checkInDate, checkOutDate, mealPlan, mealSchedule, nightlyBaseOverride, discounts } = req.body;
     const quote = await getBookingPricing(
       roomId,
       parseIstCheckIn(checkInDate),
       parseIstCheckOut(checkOutDate),
       mealPlan || {},
       nightlyBaseOverride,
-      mealSchedule || []
+      mealSchedule || [],
+      discounts || {}
     );
     res.json(quote);
   } catch (e) {
@@ -136,7 +140,8 @@ router.post('/', async (req, res, next) => {
       mealSchedule,
       nightlyBaseOverride,
       paymentMode,
-      advancePaid = 0
+      advancePaid = 0,
+      discounts
     } = req.body;
 
     const newStart = parseIstCheckIn(checkInDate);
@@ -147,7 +152,7 @@ router.post('/', async (req, res, next) => {
       return res.status(409).json({ message: 'Room not available for selected dates' });
     }
 
-    const quote = await getBookingPricing(roomId, newStart, newEnd, mealPlan || {}, nightlyBaseOverride, mealSchedule || []);
+    const quote = await getBookingPricing(roomId, newStart, newEnd, mealPlan || {}, nightlyBaseOverride, mealSchedule || [], discounts || {});
     const safeAdvance = Math.max(0, Number(advancePaid || 0));
 
     const booking = await Booking.create({
@@ -161,7 +166,18 @@ router.post('/', async (req, res, next) => {
       pricingSnapshot: {
         nightlyBase: Number(nightlyBaseOverride) > 0 ? Number(nightlyBaseOverride) : quote.nightlyBaseAvg,
         nightlyMealAddon: quote.nightlyMealAddon,
-        estimatedTotal: quote.total
+        estimatedTotal: quote.total,
+        baseBeforeDiscount: quote.baseBeforeDiscount || 0,
+        mealBeforeDiscount: quote.mealBeforeDiscount || 0,
+        totalDiscount: quote.totalDiscount || 0
+      },
+      discounts: discounts || {
+        roomDiscountType: 'NONE',
+        roomDiscountValue: 0,
+        roomDiscountAmount: 0,
+        mealDiscountType: 'NONE',
+        mealDiscountValue: 0,
+        mealDiscountAmount: 0
       },
       paymentMode: paymentMode || 'CASH',
       advancePaid: safeAdvance,

@@ -27,6 +27,27 @@ async function start() {
       process.exit(1);
     }
   });
+
+  // Graceful shutdown handlers
+  const gracefulShutdown = (signal) => {
+    console.log(`\n${signal} received. Closing server gracefully...`);
+    server.close(() => {
+      console.log('Server closed. Exiting process.');
+      process.exit(0);
+    });
+
+    // Force exit if graceful shutdown takes too long
+    setTimeout(() => {
+      console.error('Forced shutdown due to timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('exit', () => {
+    console.log('Backend process exiting...');
+  });
 }
 
 start().catch((e) => {

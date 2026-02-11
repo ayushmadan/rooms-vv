@@ -4,6 +4,8 @@ const state = {
   selectedRoomIds: [],
   customerClipboard: null,
   selectedBookingId: '',
+  selectedBillingBooking: null,
+  extraItems: [],
   bookingsById: {},
   allBookings: [],
   opsPage: 1,
@@ -32,16 +34,24 @@ const el = {
   bookingForm: document.getElementById('bookingForm'),
   copyCustomerBtn: document.getElementById('copyCustomerBtn'),
   pasteCustomerBtn: document.getElementById('pasteCustomerBtn'),
+  searchCustomerPhone: document.getElementById('searchCustomerPhone'),
+  searchCustomerBtn: document.getElementById('searchCustomerBtn'),
+  customerSearchStatus: document.getElementById('customerSearchStatus'),
   roomIdField: document.getElementById('roomIdField'),
   selectedUnitText: document.getElementById('selectedUnitText'),
   nightlyRent: document.getElementById('nightlyRent'),
   paymentMode: document.getElementById('paymentMode'),
   advancePaid: document.getElementById('advancePaid'),
   bookingNotes: document.getElementById('bookingNotes'),
+  roomDiscountType: document.getElementById('roomDiscountType'),
+  roomDiscountValue: document.getElementById('roomDiscountValue'),
+  mealDiscountType: document.getElementById('mealDiscountType'),
+  mealDiscountValue: document.getElementById('mealDiscountValue'),
   bookingStatus: document.getElementById('bookingStatus'),
   checkUpdateBtn: document.getElementById('checkUpdateBtn'),
   runUpdateBtn: document.getElementById('runUpdateBtn'),
   versionInfo: document.getElementById('versionInfo'),
+  healthIndicator: document.getElementById('healthIndicator'),
   roleSelect: document.getElementById('roleSelect'),
   adminPin: document.getElementById('adminPin'),
   adminState: document.getElementById('adminState'),
@@ -56,27 +66,48 @@ const el = {
   paymentModeUpdate: document.getElementById('paymentModeUpdate'),
   paymentType: document.getElementById('paymentType'),
   paymentNote: document.getElementById('paymentNote'),
+  paymentStatus: document.getElementById('paymentStatus'),
   manageStatus: document.getElementById('manageStatus'),
-  billingBookingId: document.getElementById('billingBookingId'),
+  billingFromDate: document.getElementById('billingFromDate'),
+  billingToDate: document.getElementById('billingToDate'),
+  billingRoomsGrid: document.getElementById('billingRoomsGrid'),
+  selectedPaymentBookingId: document.getElementById('selectedPaymentBookingId'),
+  selectedPaymentCustomer: document.getElementById('selectedPaymentCustomer'),
+  selectedPaymentUnit: document.getElementById('selectedPaymentUnit'),
+  selectedPaymentDue: document.getElementById('selectedPaymentDue'),
+  selectedPaymentPaid: document.getElementById('selectedPaymentPaid'),
+  selectedPaymentOutstanding: document.getElementById('selectedPaymentOutstanding'),
   extraAmount: document.getElementById('extraAmount'),
   extraOtherWrap: document.getElementById('extraOtherWrap'),
   extraOtherLabel: document.getElementById('extraOtherLabel'),
+  addExtraItemBtn: document.getElementById('addExtraItemBtn'),
+  extraItemsListWrap: document.getElementById('extraItemsListWrap'),
+  extraItemsList: document.getElementById('extraItemsList'),
   billStatus: document.getElementById('billStatus'),
   defSmall: document.getElementById('defSmall'),
   defBig: document.getElementById('defBig'),
   defParty: document.getElementById('defParty'),
   defDining: document.getElementById('defDining'),
-  defMeal: document.getElementById('defMeal'),
+  defBreakfast: document.getElementById('defBreakfast'),
+  defLunch: document.getElementById('defLunch'),
+  defDinner: document.getElementById('defDinner'),
   defGst: document.getElementById('defGst'),
   configRoomId: document.getElementById('configRoomId'),
   configDate: document.getElementById('configDate'),
   configRent: document.getElementById('configRent'),
-  configMealRate: document.getElementById('configMealRate'),
+  configBreakfast: document.getElementById('configBreakfast'),
+  configLunch: document.getElementById('configLunch'),
+  configDinner: document.getElementById('configDinner'),
   configStatus: document.getElementById('configStatus'),
   ledgerFrom: document.getElementById('ledgerFrom'),
   ledgerTo: document.getElementById('ledgerTo'),
-  ledgerSummary: document.getElementById('ledgerSummary'),
-  ledgerRows: document.getElementById('ledgerRows'),
+  ledgerSummaryCards: document.getElementById('ledgerSummaryCards'),
+  summaryBookings: document.getElementById('summaryBookings'),
+  summaryDue: document.getElementById('summaryDue'),
+  summaryPaid: document.getElementById('summaryPaid'),
+  summaryOutstanding: document.getElementById('summaryOutstanding'),
+  ledgerTableContainer: document.getElementById('ledgerTableContainer'),
+  ledgerTableBody: document.getElementById('ledgerTableBody'),
   ledgerStatus: document.getElementById('ledgerStatus'),
   backupFrom: document.getElementById('backupFrom'),
   backupTo: document.getElementById('backupTo'),
@@ -116,6 +147,8 @@ const el = {
   checkinName: document.getElementById('checkinName'),
   checkinPhone: document.getElementById('checkinPhone'),
   checkinIdType: document.getElementById('checkinIdType'),
+  checkinIdTypeOtherWrap: document.getElementById('checkinIdTypeOtherWrap'),
+  checkinIdTypeOther: document.getElementById('checkinIdTypeOther'),
   checkinIdNumber: document.getElementById('checkinIdNumber'),
   checkinAddress: document.getElementById('checkinAddress'),
   checkinModalError: document.getElementById('checkinModalError'),
@@ -158,6 +191,7 @@ const api = {
   roomBookings: (roomId, from, to) => api.request(`/api/bookings/room-bookings?roomId=${roomId}&from=${from}&to=${to}`),
   quote: (payload) => api.request('/api/bookings/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   createCustomer: (formData) => api.request('/api/customers', { method: 'POST', body: formData }),
+  searchCustomer: (phone) => api.request(`/api/customers/search?phone=${encodeURIComponent(phone)}`),
   createBooking: (payload) => api.request('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
   listBookings: () => api.request('/api/bookings'),
   moveBooking: (id, payload) => api.request(`/api/bookings/${id}/reschedule`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
@@ -250,9 +284,29 @@ function showCheckinModal(booking, customer) {
     // Populate editable customer fields
     el.checkinName.value = customer?.fullName || '';
     el.checkinPhone.value = customer?.phone || '';
-    el.checkinIdType.value = customer?.idType || '-';
+    el.checkinIdType.value = customer?.idType || 'AADHAAR';
     el.checkinIdNumber.value = customer?.idNumber || '';
     el.checkinAddress.value = customer?.address || '';
+
+    // Handle "Other" ID type field
+    if (customer?.idType === 'OTHER') {
+      el.checkinIdTypeOtherWrap.classList.remove('hidden');
+      el.checkinIdTypeOther.value = customer?.idNumber || '';
+    } else {
+      el.checkinIdTypeOtherWrap.classList.add('hidden');
+      el.checkinIdTypeOther.value = '';
+    }
+
+    // Add change listener for ID Type dropdown
+    const handleIdTypeChange = () => {
+      if (el.checkinIdType.value === 'OTHER') {
+        el.checkinIdTypeOtherWrap.classList.remove('hidden');
+      } else {
+        el.checkinIdTypeOtherWrap.classList.add('hidden');
+      }
+    };
+    el.checkinIdType.removeEventListener('change', handleIdTypeChange);
+    el.checkinIdType.addEventListener('change', handleIdTypeChange);
 
     // Reset error state
     el.checkinModalError.style.display = 'none';
@@ -267,6 +321,8 @@ function showCheckinModal(booking, customer) {
       const name = el.checkinName.value.trim();
       const phone = el.checkinPhone.value.trim();
       const address = el.checkinAddress.value.trim();
+      const idType = el.checkinIdType.value;
+      const idNumber = idType === 'OTHER' ? el.checkinIdTypeOther.value.trim() : el.checkinIdNumber.value.trim();
 
       if (!name || !phone) {
         el.checkinModalError.textContent = 'Name and phone are required';
@@ -281,7 +337,9 @@ function showCheckinModal(booking, customer) {
         customerId: customer?._id,
         fullName: name,
         phone: phone,
-        address: address
+        address: address,
+        idType: idType,
+        idNumber: idNumber
       });
     };
 
@@ -429,6 +487,56 @@ function selectedExtraLabel() {
   return val === 'Other' ? (el.extraOtherLabel.value.trim() || 'Other') : val;
 }
 
+function addExtraItem() {
+  const amount = Number(el.extraAmount.value || 0);
+  if (amount <= 0) {
+    setStatus(el.billStatus, 'Please enter a valid amount for the extra item.', 'error');
+    return;
+  }
+
+  const label = selectedExtraLabel();
+  const category = label.toLowerCase().includes('food') ? 'FOOD' : 'SERVICE';
+
+  state.extraItems.push({ label, amount, category });
+  renderExtraItemsList();
+
+  // Clear inputs
+  el.extraAmount.value = '0';
+  setStatus(el.billStatus, `Added: ${label} - Rs ${amount}`, 'success');
+}
+
+function removeExtraItem(index) {
+  state.extraItems.splice(index, 1);
+  renderExtraItemsList();
+  setStatus(el.billStatus, 'Item removed from list.', 'success');
+}
+
+function renderExtraItemsList() {
+  if (!el.extraItemsList || !el.extraItemsListWrap) return;
+
+  if (state.extraItems.length === 0) {
+    el.extraItemsListWrap.style.display = 'none';
+    return;
+  }
+
+  el.extraItemsListWrap.style.display = 'block';
+  el.extraItemsList.innerHTML = '';
+
+  state.extraItems.forEach((item, index) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: #f3f4f6; border-radius: 4px;';
+    div.innerHTML = `
+      <span><strong>${item.label}:</strong> Rs ${item.amount.toLocaleString()}</span>
+      <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" data-index="${index}">Remove</button>
+    `;
+
+    const removeBtn = div.querySelector('button');
+    removeBtn.addEventListener('click', () => removeExtraItem(index));
+
+    el.extraItemsList.appendChild(div);
+  });
+}
+
 function setStatus(node, text, type = 'info') {
   node.textContent = text;
   if (type === 'error') node.style.color = '#a4372f';
@@ -467,8 +575,35 @@ async function renderRoomBookings(roomId) {
     const div = document.createElement('div');
     div.className = 'booking-card';
     div.innerHTML = `<strong>${displayBookingRef(r.bookingId)}</strong><small>${r.customerName}</small><small>${r.checkInIst} to ${r.checkOutIst}</small><small>Status: ${r.status} | Payment: ${r.paymentStatus}</small>`;
-    div.addEventListener('click', () => {
+    div.addEventListener('click', async () => {
       fillSelectedBooking(r.bookingId);
+
+      // Auto-fill customer details from the booking
+      const booking = state.bookingsById[r.bookingId];
+      if (booking && booking.customerId) {
+        const customer = booking.customerId;
+        // Auto-fill customer form fields
+        if (el.fullName) el.fullName.value = customer.fullName || '';
+        if (el.phone) el.phone.value = customer.phone || '';
+        if (el.email) el.email.value = customer.email || '';
+        if (el.address) el.address.value = customer.address || '';
+
+        // Handle ID type
+        if (customer.idType) {
+          const idTypeRadios = document.querySelectorAll('input[name="idType"]');
+          idTypeRadios.forEach(radio => {
+            radio.checked = radio.value === customer.idType;
+          });
+
+          // Show "Other" field if needed
+          if (customer.idType === 'OTHER' && el.idTypeOther) {
+            el.idTypeOtherWrap.classList.remove('hidden');
+            el.idTypeOther.value = customer.idNumber || '';
+          }
+        }
+
+        setStatus(el.bookingStatus, 'Customer details auto-filled from selected booking', 'success');
+      }
     });
     el.roomBookingsList.appendChild(div);
   });
@@ -481,11 +616,14 @@ function renderRooms() {
   rooms.forEach((room) => {
     const tile = document.createElement('button');
     tile.type = 'button';
-    tile.className = `room-tile ${room.available ? 'available' : 'booked'} ${room.needsCleaning ? 'needs-cleaning' : ''} ${state.selectedRoomIds.includes(room.roomId) ? 'selected' : ''}`;
+    const checkedInClass = room.checkedInCount > 0 ? 'checked-in' : '';
+    const needsCleaningClass = room.needsCleaning ? 'needs-cleaning' : '';
+    const availabilityClass = room.available ? 'available' : 'booked';
+    tile.className = `room-tile ${availabilityClass} ${checkedInClass} ${needsCleaningClass} ${state.selectedRoomIds.includes(room.roomId) ? 'selected' : ''}`.trim();
     tile.innerHTML = `<h4>${unitTitle(room)}</h4>
       <p>${room.size.replace('_', ' ')} ${room.floor > 0 ? `· Floor ${room.floor}` : ''}</p>
       <p style="font-weight: 600; color: var(--brand);">Rs ${defaultRent(room)}/night</p>
-      <p>${room.available ? 'Available' : `Booked (${room.occupancyCount})`}</p>`;
+      <p>${room.available ? 'Available' : `Booked (${room.occupancyCount})`}${room.needsCleaning ? ' (Needs Cleaning)' : ''}</p>`;
 
     tile.addEventListener('click', async () => {
       state.selectedRoom = room;
@@ -521,7 +659,10 @@ function renderOperationsRoomTiles() {
   rooms.forEach((room) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `room-tile ${room.available ? 'available' : 'booked'} ${room.needsCleaning ? 'needs-cleaning' : ''} ${el.selectedRoomIdForView.value === room.roomId ? 'selected' : ''}`;
+    const checkedInClass = room.checkedInCount > 0 ? 'checked-in' : '';
+    const needsCleaningClass = room.needsCleaning ? 'needs-cleaning' : '';
+    const availabilityClass = room.available ? 'available' : 'booked';
+    btn.className = `room-tile ${availabilityClass} ${checkedInClass} ${needsCleaningClass} ${el.selectedRoomIdForView.value === room.roomId ? 'selected' : ''}`.trim();
 
     const statusText = room.available ? 'Available' : `${room.occupancyCount || 0} Booking${room.occupancyCount !== 1 ? 's' : ''}`;
     const cleaningBadge = room.needsCleaning ? '<span class="badge warn" style="font-size: 0.7rem; margin-top: 4px;">Needs Cleaning</span>' : '';
@@ -566,6 +707,74 @@ async function loadOperationsBookings() {
   });
 }
 
+async function renderBillingRoomTiles() {
+  if (!el.billingRoomsGrid || !el.billingFromDate?.value || !el.billingToDate?.value) return;
+
+  try {
+    const availability = await api.availability(el.billingFromDate.value, el.billingToDate.value);
+    const rooms = availability.rooms || [];
+
+    el.billingRoomsGrid.innerHTML = '';
+
+    for (const room of rooms) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const checkedInClass = room.checkedInCount > 0 ? 'checked-in' : '';
+      const needsCleaningClass = room.needsCleaning ? 'needs-cleaning' : '';
+      const availabilityClass = room.available ? 'available' : 'booked';
+      btn.className = `room-tile ${availabilityClass} ${checkedInClass} ${needsCleaningClass}`.trim();
+
+      const statusText = room.available ? 'Available' : `${room.occupancyCount || 0} Booking${room.occupancyCount !== 1 ? 's' : ''}`;
+      const cleaningBadge = room.needsCleaning ? '<span class="badge warn" style="font-size: 0.7rem; margin-top: 4px;">Needs Cleaning</span>' : '';
+
+      btn.innerHTML = `<h4>${unitTitle(room)}</h4><p>${statusText}</p>${cleaningBadge}`;
+
+      btn.addEventListener('click', async () => {
+        // Load and show bookings for this room
+        const rows = await api.roomBookings(room.roomId, el.billingFromDate.value, el.billingToDate.value);
+
+        if (!rows.length) {
+          setStatus(el.billStatus, `No bookings found for ${unitTitle(room)} in the selected date range.`, 'error');
+          return;
+        }
+
+        // If only one booking, auto-select it
+        if (rows.length === 1) {
+          selectBillingBooking(rows[0]);
+        } else {
+          // Show a modal or list to let user choose which booking
+          // For now, select the first active booking
+          const activeBooking = rows.find(r => ['BOOKED', 'CHECKED_IN', 'CHECKED_OUT'].includes(r.status)) || rows[0];
+          selectBillingBooking(activeBooking);
+        }
+      });
+
+      el.billingRoomsGrid.appendChild(btn);
+    }
+  } catch (err) {
+    setStatus(el.billStatus, `Failed to load rooms: ${err.message}`, 'error');
+  }
+}
+
+function selectBillingBooking(booking) {
+  if (!booking) return;
+
+  state.selectedBillingBooking = booking;
+
+  // Show selected booking info card
+  el.selectedPaymentInfo.style.display = 'block';
+  el.selectedPaymentBookingId.textContent = displayBookingRef(booking.bookingId);
+  el.selectedPaymentCustomer.textContent = booking.customerName || '-';
+  el.selectedPaymentUnit.textContent = booking.roomCode || '-';
+  el.selectedPaymentDue.textContent = `Rs ${(booking.totalDue || 0).toLocaleString()}`;
+  el.selectedPaymentPaid.textContent = `Rs ${(booking.totalPaid || 0).toLocaleString()}`;
+
+  const outstanding = Math.max(0, (booking.totalDue || 0) - (booking.totalPaid || 0));
+  el.selectedPaymentOutstanding.textContent = `Rs ${outstanding.toLocaleString()}`;
+
+  setStatus(el.paymentStatus, `Booking selected: ${displayBookingRef(booking.bookingId)}`, 'success');
+}
+
 async function refreshQuote() {
   const selectedRooms = selectedRoomsFromState();
   if (!selectedRooms.length || !el.fromDate.value || !el.toDate.value) {
@@ -582,6 +791,9 @@ async function refreshQuote() {
     let grandBase = 0;
     let grandMeals = 0;
     let grandTotal = 0;
+    let grandDiscount = 0;
+    let grandBaseBeforeDiscount = 0;
+    let grandMealBeforeDiscount = 0;
     let nights = 0;
 
     for (const room of selectedRooms) {
@@ -592,13 +804,24 @@ async function refreshQuote() {
         checkOutDate: el.toDate.value,
         mealPlan: mealPlanFromForm(),
         nightlyBaseOverride: override,
-        mealSchedule: mealScheduleFromPlanner()
+        mealSchedule: mealScheduleFromPlanner(),
+        discounts: {
+          roomDiscountType: el.roomDiscountType.value,
+          roomDiscountValue: Number(el.roomDiscountValue.value || 0),
+          mealDiscountType: el.mealDiscountType.value,
+          mealDiscountValue: Number(el.mealDiscountValue.value || 0)
+        }
       });
       nights = quote.nights;
       grandBase += quote.baseTotal;
       grandMeals += quote.mealTotal;
       grandTotal += quote.total;
+      grandDiscount += (quote.totalDiscount || 0);
+      grandBaseBeforeDiscount += (quote.baseBeforeDiscount || quote.baseTotal);
+      grandMealBeforeDiscount += (quote.mealBeforeDiscount || quote.mealTotal);
     }
+
+    const hasDiscount = grandDiscount > 0;
 
     el.quoteBox.innerHTML = `
       <div class="quote-card">
@@ -606,8 +829,11 @@ async function refreshQuote() {
         <div class="quote-line"><span>Nights</span><strong>${nights}</strong></div>
       </div>
       <div class="quote-card">
+        ${hasDiscount ? `<div class="quote-line"><span>Base (Before Discount)</span><strong>Rs ${grandBaseBeforeDiscount}</strong></div>` : ''}
         <div class="quote-line"><span>Base Total</span><strong>Rs ${grandBase}</strong></div>
+        ${hasDiscount ? `<div class="quote-line"><span>Meals (Before Discount)</span><strong>Rs ${grandMealBeforeDiscount}</strong></div>` : ''}
         <div class="quote-line"><span>Meals Total</span><strong>Rs ${grandMeals}</strong></div>
+        ${hasDiscount ? `<div class="quote-line" style="color: #d9534f;"><span>Total Discount</span><strong>- Rs ${grandDiscount}</strong></div>` : ''}
         <div class="quote-line"><span>Total (GST Inclusive)</span><strong>Rs ${grandTotal}</strong></div>
       </div>`;
   } catch (err) {
@@ -647,7 +873,9 @@ function fillDefaultsForm() {
   el.defBig.value = state.defaults.defaultBigRoomRent;
   el.defParty.value = state.defaults.defaultPartyHallRent;
   el.defDining.value = state.defaults.defaultDiningHallRent;
-  el.defMeal.value = state.defaults.mealAddonPerDay;
+  el.defBreakfast.value = state.defaults.breakfastRate || 100;
+  el.defLunch.value = state.defaults.lunchRate || 150;
+  el.defDinner.value = state.defaults.dinnerRate || 200;
   el.defGst.value = state.defaults.gstPercent;
 }
 
@@ -910,10 +1138,38 @@ el.pasteCustomerBtn.addEventListener('click', async () => {
   setStatus(el.bookingStatus, 'Customer information pasted.', 'success');
 });
 
+el.searchCustomerBtn.addEventListener('click', async () => {
+  const phone = el.searchCustomerPhone.value.trim();
+  if (!phone) {
+    setStatus(el.customerSearchStatus, 'Please enter a phone number to search.', 'error');
+    return;
+  }
+
+  try {
+    const customer = await api.searchCustomer(phone);
+
+    // Auto-fill form with customer data
+    applyCustomerDetailsToForm({
+      fullName: customer.fullName,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.address,
+      idType: customer.idType,
+      idNumber: customer.idNumber,
+      photoIdPath: customer.photoIdPath
+    });
+
+    setStatus(el.customerSearchStatus, `Customer found: ${customer.fullName}. Details auto-filled.`, 'success');
+    el.searchCustomerPhone.value = ''; // Clear search input
+  } catch (err) {
+    setStatus(el.customerSearchStatus, err.message || 'Customer not found with this phone number.', 'error');
+  }
+});
+
 el.roleSelect.addEventListener('change', refreshAdminStatus);
 el.adminPin.addEventListener('input', refreshAdminStatus);
 
-[el.fromDate, el.toDate, el.nightlyRent].forEach((n) => n.addEventListener('change', refreshQuote));
+[el.fromDate, el.toDate, el.nightlyRent, el.roomDiscountType, el.roomDiscountValue, el.mealDiscountType, el.mealDiscountValue].forEach((n) => n.addEventListener('change', refreshQuote));
 
 el.fromDate.addEventListener('change', () => {
   if (el.toDate.value && el.fromDate.value > el.toDate.value) {
@@ -948,6 +1204,8 @@ el.toDate.addEventListener('change', () => {
 
 el.opFromDate?.addEventListener('change', loadOperationsBookings);
 el.opToDate?.addEventListener('change', loadOperationsBookings);
+el.billingFromDate?.addEventListener('change', renderBillingRoomTiles);
+el.billingToDate?.addEventListener('change', renderBillingRoomTiles);
 el.moveRoomId?.addEventListener('change', () => {
   renderOperationsRoomTiles();
   loadOperationsBookings();
@@ -995,7 +1253,13 @@ el.bookingForm.addEventListener('submit', async (e) => {
           nightlyBaseOverride: Number(el.nightlyRent.value || 0) > 0 ? Number(el.nightlyRent.value) : defaultRent(room),
           paymentMode: el.paymentMode.value,
           advancePaid: Number(el.advancePaid.value || 0),
-          notes: el.bookingNotes.value.trim()
+          notes: el.bookingNotes.value.trim(),
+          discounts: {
+            roomDiscountType: el.roomDiscountType.value,
+            roomDiscountValue: Number(el.roomDiscountValue.value || 0),
+            mealDiscountType: el.mealDiscountType.value,
+            mealDiscountValue: Number(el.mealDiscountValue.value || 0)
+          }
         });
         createdIds.push(booking.bookingCode || booking.bookingRef || booking._id);
       } catch (inner) {
@@ -1107,8 +1371,8 @@ async function updateBookingAction(action) {
 }
 
 document.getElementById('addPaymentBtn').addEventListener('click', async () => {
-  const bookingId = el.manageBookingId.value.trim();
-  if (!bookingId) return setStatus(el.manageStatus, 'Select booking first.', 'error');
+  const bookingId = state.selectedBillingBooking?.bookingId;
+  if (!bookingId) return setStatus(el.paymentStatus, 'Select a booking first from the room tiles.', 'error');
 
   try {
     await api.addPayment(bookingId, {
@@ -1117,23 +1381,43 @@ document.getElementById('addPaymentBtn').addEventListener('click', async () => {
       type: el.paymentType.value,
       note: el.paymentNote.value.trim()
     });
-    setStatus(el.manageStatus, 'Payment recorded.', 'success');
-    await loadBookings();
+    setStatus(el.paymentStatus, 'Payment recorded successfully.', 'success');
+
+    // Refresh the selected booking info
+    const rows = await api.roomBookings(state.selectedBillingBooking.roomId, el.billingFromDate.value, el.billingToDate.value);
+    const updatedBooking = rows.find(r => r.bookingId === bookingId);
+    if (updatedBooking) {
+      selectBillingBooking(updatedBooking);
+    }
   } catch (err) {
-    setStatus(el.manageStatus, err.message, 'error');
+    setStatus(el.paymentStatus, err.message, 'error');
   }
 });
 
 document.getElementById('markBillPaidBtn').addEventListener('click', async () => {
-  const bookingId = el.manageBookingId.value.trim();
-  if (!bookingId) return setStatus(el.manageStatus, 'Select booking first.', 'error');
+  const bookingId = state.selectedBillingBooking?.bookingId;
+  if (!bookingId) return setStatus(el.paymentStatus, 'Select a booking first from the room tiles.', 'error');
+
+  // Show confirmation dialog
+  const outstanding = Math.max(0, (state.selectedBillingBooking.totalDue || 0) - (state.selectedBillingBooking.totalPaid || 0));
+  const confirmMessage = `Are you sure you want to mark this bill as fully paid?\n\nBooking: ${displayBookingRef(bookingId)}\nOutstanding Amount: Rs ${outstanding.toLocaleString()}\n\nThis will record a settlement payment for the outstanding amount.`;
+
+  if (!confirm(confirmMessage)) {
+    return;
+  }
 
   try {
-    await api.addPayment(bookingId, { markBillPaid: true, amount: 0, mode: el.paymentModeUpdate.value, type: 'SETTLEMENT', note: 'Marked paid' });
-    setStatus(el.manageStatus, 'Bill marked as paid.', 'success');
-    await loadBookings();
+    await api.addPayment(bookingId, { markBillPaid: true, amount: 0, mode: el.paymentModeUpdate.value, type: 'SETTLEMENT', note: 'Marked as fully paid' });
+    setStatus(el.paymentStatus, 'Bill marked as fully paid successfully.', 'success');
+
+    // Refresh the selected booking info
+    const rows = await api.roomBookings(state.selectedBillingBooking.roomId, el.billingFromDate.value, el.billingToDate.value);
+    const updatedBooking = rows.find(r => r.bookingId === bookingId);
+    if (updatedBooking) {
+      selectBillingBooking(updatedBooking);
+    }
   } catch (err) {
-    setStatus(el.manageStatus, err.message, 'error');
+    setStatus(el.paymentStatus, err.message, 'error');
   }
 });
 
@@ -1154,32 +1438,57 @@ document.getElementById('saveCustomerBtn').addEventListener('click', async () =>
   }
 });
 
-document.getElementById('generateBillBtn').addEventListener('click', async () => {
-  const bookingId = el.billingBookingId.value.trim();
-  if (!bookingId) return setStatus(el.billStatus, 'Enter booking ID.', 'error');
+document.getElementById('addExtraItemBtn').addEventListener('click', () => {
+  addExtraItem();
+});
 
-  const amount = Number(el.extraAmount.value || 0);
-  const label = selectedExtraLabel();
-  const extras = amount > 0 ? [{ label, amount, category: label.toLowerCase().includes('food') ? 'FOOD' : 'SERVICE' }] : [];
+document.getElementById('generateBillBtn').addEventListener('click', async () => {
+  const bookingId = state.selectedBillingBooking?.bookingId;
+  if (!bookingId) return setStatus(el.billStatus, 'Select a booking first from the room tiles.', 'error');
 
   try {
-    const bill = await api.generateBill(bookingId, extras);
-    setStatus(el.billStatus, `Bill generated. Total Rs ${bill.totalAmount}`, 'success');
+    // Use the extra items array
+    const bill = await api.generateBill(bookingId, state.extraItems);
+    setStatus(el.billStatus, `Bill generated successfully. Total: Rs ${bill.totalAmount.toLocaleString()}`, 'success');
+
+    // Clear extra items list after successful bill generation
+    state.extraItems = [];
+    renderExtraItemsList();
   } catch (err) {
     setStatus(el.billStatus, err.message, 'error');
   }
 });
 
-document.getElementById('openBillBtn').addEventListener('click', () => {
-  const id = el.billingBookingId.value.trim();
-  if (!id) return setStatus(el.billStatus, 'Enter booking ID.', 'error');
-  const w = window.open(`/api/billing/pdf/${id}`, '_blank');
-  if (w) setTimeout(() => w.print(), 800);
+document.getElementById('openBillBtn').addEventListener('click', async () => {
+  const id = state.selectedBillingBooking?.bookingId;
+  if (!id) return setStatus(el.billStatus, 'Select a booking first from the room tiles.', 'error');
+
+  try {
+    // Check if bill exists before opening
+    const response = await fetch(`/api/billing/pdf/${id}`, { method: 'HEAD' });
+    if (!response.ok) {
+      setStatus(el.billStatus, 'Bill not generated yet. Please generate the bill first.', 'error');
+      return;
+    }
+
+    // Bill exists, open and print
+    const w = window.open(`/api/billing/pdf/${id}`, '_blank');
+    if (w) {
+      // Use Electron print API if available, otherwise use browser print
+      if (window.electronAPI && window.electronAPI.print) {
+        setTimeout(() => window.electronAPI.print(), 800);
+      } else {
+        setTimeout(() => w.print(), 800);
+      }
+    }
+  } catch (err) {
+    setStatus(el.billStatus, `Failed to open bill: ${err.message}`, 'error');
+  }
 });
 
 document.getElementById('declarationBtn').addEventListener('click', () => {
-  const id = el.billingBookingId.value.trim();
-  if (!id) return setStatus(el.billStatus, 'Enter booking ID.', 'error');
+  const id = state.selectedBillingBooking?.bookingId;
+  if (!id) return setStatus(el.billStatus, 'Select a booking first from the room tiles.', 'error');
   const w = window.open(`/api/billing/declaration/${id}`, '_blank');
   if (w) setTimeout(() => w.print(), 800);
 });
@@ -1192,7 +1501,9 @@ document.getElementById('saveDefaultsBtn').addEventListener('click', async () =>
       defaultBigRoomRent: Number(el.defBig.value || 0),
       defaultPartyHallRent: Number(el.defParty.value || 0),
       defaultDiningHallRent: Number(el.defDining.value || 0),
-      mealAddonPerDay: Number(el.defMeal.value || 0),
+      breakfastRate: Number(el.defBreakfast.value || 100),
+      lunchRate: Number(el.defLunch.value || 150),
+      dinnerRate: Number(el.defDinner.value || 200),
       gstPercent: Number(el.defGst.value || 0)
     }, pin);
 
@@ -1219,8 +1530,19 @@ document.getElementById('saveRateBtn').addEventListener('click', async () => {
     if (el.configRoomId.value.trim() && Number(el.configRent.value || 0) > 0) {
       await api.saveRate({ roomId: el.configRoomId.value.trim(), date: el.configDate.value, rent: Number(el.configRent.value) }, pin);
     }
-    if (Number(el.configMealRate.value || 0) > 0) {
-      await api.saveMealRate({ date: el.configDate.value, mealAddonPerDay: Number(el.configMealRate.value) }, pin);
+
+    // Save individual meal rates if any are specified
+    const breakfastVal = Number(el.configBreakfast.value || 0);
+    const lunchVal = Number(el.configLunch.value || 0);
+    const dinnerVal = Number(el.configDinner.value || 0);
+
+    if (breakfastVal > 0 || lunchVal > 0 || dinnerVal > 0) {
+      await api.saveMealRate({
+        date: el.configDate.value,
+        breakfastRate: breakfastVal || undefined,
+        lunchRate: lunchVal || undefined,
+        dinnerRate: dinnerVal || undefined
+      }, pin);
     }
 
     setStatus(el.configStatus, 'Date overrides saved.', 'success');
@@ -1233,18 +1555,45 @@ document.getElementById('saveRateBtn').addEventListener('click', async () => {
 document.getElementById('loadLedgerBtn').addEventListener('click', async () => {
   try {
     const pin = await requireAdminPinForAction();
-    const report = await api.ledger(el.ledgerFrom.value, el.ledgerTo.value, pin);
-    el.ledgerSummary.textContent = `Bookings: ${report.summary.totalBookings}\nBills: ${report.summary.totalBills}\nDue: Rs ${report.summary.totalDue}\nPaid: Rs ${report.summary.totalPaid}\nOutstanding: Rs ${report.summary.outstanding}\nAdvance: Rs ${report.summary.totalAdvance}`;
 
-    el.ledgerRows.innerHTML = '';
-    report.rows.slice(0, 100).forEach((r) => {
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.textContent = `${r.bookingId} | ${r.customer} | ${r.unit} | Due ${r.amountDue} | Paid ${r.paid} | ${r.paymentStatus}`;
-      el.ledgerRows.appendChild(div);
+    // Fix: Add +1 day to the 'to' date when querying to include the end date
+    const fromDate = el.ledgerFrom.value;
+    const toDateInput = new Date(el.ledgerTo.value);
+    toDateInput.setDate(toDateInput.getDate() + 1);
+    const toDate = toDateInput.toISOString().split('T')[0];
+
+    const report = await api.ledger(fromDate, toDate, pin);
+
+    // Show and populate summary cards
+    el.ledgerSummaryCards.style.display = 'grid';
+    el.summaryBookings.textContent = `${report.summary.totalBookings} / ${report.summary.totalBills}`;
+    el.summaryDue.textContent = `Rs ${report.summary.totalDue.toLocaleString()}`;
+    el.summaryPaid.textContent = `Rs ${report.summary.totalPaid.toLocaleString()}`;
+    el.summaryOutstanding.textContent = `Rs ${report.summary.outstanding.toLocaleString()}`;
+
+    // Show table and populate rows
+    el.ledgerTableContainer.style.display = 'block';
+    el.ledgerTableBody.innerHTML = '';
+
+    report.rows.forEach((r) => {
+      const row = document.createElement('tr');
+      row.style.borderBottom = '1px solid #e5e7eb';
+      row.innerHTML = `
+        <td style="padding: 0.75rem;">${r.bookingId || '-'}</td>
+        <td style="padding: 0.75rem;">${r.customer || '-'}</td>
+        <td style="padding: 0.75rem;">${r.unit || '-'}</td>
+        <td style="padding: 0.75rem;">${r.checkIn ? fmtIst(r.checkIn) : '-'}</td>
+        <td style="padding: 0.75rem;">${r.checkOut ? fmtIst(r.checkOut) : '-'}</td>
+        <td style="padding: 0.75rem;"><span style="padding: 0.25rem 0.5rem; background: ${r.status === 'CHECKED_OUT' ? '#fef3c7' : r.status === 'CHECKED_IN' ? '#d1fae5' : '#e0e7ff'}; border-radius: 4px; font-size: 0.75rem;">${r.status || '-'}</span></td>
+        <td style="padding: 0.75rem;"><span style="padding: 0.25rem 0.5rem; background: ${r.paymentStatus === 'PAID' ? '#d1fae5' : r.paymentStatus === 'PARTIAL' ? '#fed7aa' : '#fecaca'}; border-radius: 4px; font-size: 0.75rem;">${r.paymentStatus || '-'}</span></td>
+        <td style="padding: 0.75rem; text-align: right; font-weight: 600;">Rs ${(r.amountDue || 0).toLocaleString()}</td>
+        <td style="padding: 0.75rem; text-align: right; color: #16a34a;">Rs ${(r.paid || 0).toLocaleString()}</td>
+        <td style="padding: 0.75rem; text-align: right; color: #ea580c; font-weight: 600;">Rs ${(r.outstanding || 0).toLocaleString()}</td>
+      `;
+      el.ledgerTableBody.appendChild(row);
     });
 
-    setStatus(el.ledgerStatus, 'Ledger loaded.', 'success');
+    setStatus(el.ledgerStatus, `Ledger loaded: ${report.rows.length} booking(s) found.`, 'success');
   } catch (err) {
     setStatus(el.ledgerStatus, err.message, 'error');
   }
@@ -1274,11 +1623,38 @@ document.getElementById('uploadSelectedBtn').addEventListener('click', async () 
   }
 });
 
+async function checkSystemHealth() {
+  try {
+    const response = await fetch('/api/health');
+    const health = await response.json();
+
+    if (!el.healthIndicator) return;
+
+    const isHealthy = health.ok && health.mongoState === 1;
+
+    if (isHealthy) {
+      el.healthIndicator.classList.remove('unhealthy');
+      el.healthIndicator.title = 'System Healthy\nDatabase: Connected';
+    } else {
+      el.healthIndicator.classList.add('unhealthy');
+      const mongoStatus = health.mongoState === 1 ? 'Connected' : `Disconnected (State: ${health.mongoState})`;
+      el.healthIndicator.title = `System Unhealthy\nDatabase: ${mongoStatus}`;
+    }
+  } catch (err) {
+    if (el.healthIndicator) {
+      el.healthIndicator.classList.add('unhealthy');
+      el.healthIndicator.title = 'System Unreachable\nBackend not responding';
+    }
+  }
+}
+
 async function bootstrap() {
   el.fromDate.value = todayIso();
   el.toDate.value = plusDaysIso(1);
   el.opFromDate.value = todayIso();
   el.opToDate.value = plusDaysIso(1);
+  el.billingFromDate.value = todayIso();
+  el.billingToDate.value = plusDaysIso(1);
   el.moveCheckIn.value = todayIso();
   el.moveCheckOut.value = plusDaysIso(1);
   el.configDate.value = todayIso();
@@ -1301,7 +1677,30 @@ async function bootstrap() {
   await refreshAdminStatus();
   await searchAvailability().catch(() => setStatus(el.bookingStatus, 'Inventory not seeded yet.', 'info'));
   await loadBookings().catch(() => {});
+
+  // System health monitoring
+  await checkSystemHealth();
+  setInterval(checkSystemHealth, 20000); // Check every 20 seconds
+
+  // Health indicator click handler
+  if (el.healthIndicator) {
+    el.healthIndicator.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/api/health');
+        const health = await response.json();
+
+        const mongoStatus = health.mongoState === 1 ? 'Connected' : `Disconnected (State: ${health.mongoState})`;
+        const details = `System Health Details:\n\nBackend: Running\nDatabase: ${mongoStatus}\nMongo State: ${health.mongoState}`;
+
+        alert(details);
+      } catch (err) {
+        alert('System Health Details:\n\nBackend: Not responding\nPlease check if the application is running.');
+      }
+    });
+  }
+
   await loadOperationsBookings().catch(() => {});
+  await renderBillingRoomTiles().catch(() => {});
   await loadBackupFiles().catch(() => {});
 
   setStatus(el.bookingStatus, `System initialized. GST rate: ${state.defaults.gstPercent}% (inclusive).`);

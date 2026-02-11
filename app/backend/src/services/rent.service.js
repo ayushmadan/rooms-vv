@@ -22,7 +22,41 @@ async function getMealAddonForDate(date) {
   const override = await MealRateConfig.findOne({ date: dateOnly }).lean();
   if (override) return override.mealAddonPerDay;
   const settings = await getSettings();
-  return settings.mealAddonPerDay;
+  // Fallback to mealAddonPerDay for backward compatibility
+  return settings.mealAddonPerDay || 250;
+}
+
+// Get individual meal rates for a specific date
+async function getMealRatesForDate(date) {
+  const dateOnly = toDateOnly(date);
+  const override = await MealRateConfig.findOne({ date: dateOnly }).lean();
+  const settings = await getSettings();
+
+  // If there's an override with individual rates, use those
+  if (override && (override.breakfastRate || override.lunchRate || override.dinnerRate)) {
+    return {
+      breakfast: override.breakfastRate || settings.breakfastRate || 100,
+      lunch: override.lunchRate || settings.lunchRate || 150,
+      dinner: override.dinnerRate || settings.dinnerRate || 200
+    };
+  }
+
+  // Use settings individual rates if available
+  if (settings.breakfastRate || settings.lunchRate || settings.dinnerRate) {
+    return {
+      breakfast: settings.breakfastRate || 100,
+      lunch: settings.lunchRate || 150,
+      dinner: settings.dinnerRate || 200
+    };
+  }
+
+  // Fallback: split mealAddonPerDay proportionally
+  const total = settings.mealAddonPerDay || 250;
+  return {
+    breakfast: Math.round(total * 0.4),
+    lunch: Math.round(total * 0.3),
+    dinner: Math.round(total * 0.3)
+  };
 }
 
 function mealCount(mealPlan = {}) {
@@ -38,38 +72,120 @@ function mealCountForDate(mealPlan = {}, mealSchedule = [], dateCursor) {
   return mealCount(mealPlan);
 }
 
-async function getBookingPricing(roomId, checkInDate, checkOutDate, mealPlan = {}, nightlyBaseOverride = null, mealSchedule = []) {
+// Calculate discount amount based on type and value
+function calculateDiscountAmount(baseAmount, discountType, discountValue) {
+  if (!discountType || discountType === 'NONE' || !discountValue || discountValue <= 0) {
+    return 0;
+  }
+
+  if (discountType === 'PERCENTAGE') {
+    // Percentage: 0-100%
+    const percentage = Math.min(Math.max(discountValue, 0), 100);
+    return Math.round((baseAmount * percentage) / 100);
+  }
+
+  if (discountType === 'AMOUNT') {
+    // Amount: Cannot exceed base amount
+    return Math.min(discountValue, baseAmount);
+  }
+
+  return 0;
+}
+
+// Calculate meal cost for a specific date using individual rates
+async function getMealCostForDate(mealPlan = {}, mealSchedule = [], dateCursor) {
+  const rates = await getMealRatesForDate(dateCursor);
+
+  let selectedMeals = { breakfast: false, lunch: false, dinner: false };
+
+  // Check meal schedule first
+  if (Array.isArray(mealSchedule) && mealSchedule.length) {
+    const key = formatIstYmd(dateCursor);
+    const day = mealSchedule.find((m) => m.date === key);
+    if (day) {
+      selectedMeals = {
+        breakfast: !!day.breakfast,
+        lunch: !!day.lunch,
+        dinner: !!day.dinner
+      };
+    } else {
+      // Fallback to mealPlan
+      selectedMeals = {
+        breakfast: !!mealPlan.breakfast,
+        lunch: !!mealPlan.lunch,
+        dinner: !!mealPlan.dinner
+      };
+    }
+  } else {
+    // Use mealPlan
+    selectedMeals = {
+      breakfast: !!mealPlan.breakfast,
+      lunch: !!mealPlan.lunch,
+      dinner: !!mealPlan.dinner
+    };
+  }
+
+  let cost = 0;
+  if (selectedMeals.breakfast) cost += rates.breakfast;
+  if (selectedMeals.lunch) cost += rates.lunch;
+  if (selectedMeals.dinner) cost += rates.dinner;
+
+  return cost;
+}
+
+async function getBookingPricing(roomId, checkInDate, checkOutDate, mealPlan = {}, nightlyBaseOverride = null, mealSchedule = [], discounts = {}) {
   const start = new Date(checkInDate);
   const end = new Date(checkOutDate);
   if (start >= end) throw new Error('Invalid booking dates');
 
   let dateCursor = new Date(start);
-  let total = 0;
   let nights = 0;
   let baseTotal = 0;
   let mealTotal = 0;
 
   while (dateCursor < end) {
     const dailyBase = Number(nightlyBaseOverride) > 0 ? Number(nightlyBaseOverride) : await getRentForRoomDate(roomId, dateCursor);
-    const dailyMealAddon = mealCountForDate(mealPlan, mealSchedule, dateCursor) * (await getMealAddonForDate(dateCursor));
-    total += dailyBase + dailyMealAddon;
+    const dailyMealCost = await getMealCostForDate(mealPlan, mealSchedule, dateCursor);
     baseTotal += dailyBase;
-    mealTotal += dailyMealAddon;
+    mealTotal += dailyMealCost;
     nights += 1;
 
     dateCursor = new Date(dateCursor.getTime() + 24 * 60 * 60 * 1000);
   }
 
+  // Calculate discounts
+  const roomDiscountAmount = calculateDiscountAmount(
+    baseTotal,
+    discounts.roomDiscountType,
+    discounts.roomDiscountValue
+  );
+
+  const mealDiscountAmount = calculateDiscountAmount(
+    mealTotal,
+    discounts.mealDiscountType,
+    discounts.mealDiscountValue
+  );
+
+  const totalDiscount = roomDiscountAmount + mealDiscountAmount;
+  const baseAfterDiscount = baseTotal - roomDiscountAmount;
+  const mealAfterDiscount = mealTotal - mealDiscountAmount;
+  const total = baseAfterDiscount + mealAfterDiscount;
+
   return {
     nights,
     nightlyBaseAvg: nights ? Math.round(baseTotal / nights) : 0,
     nightlyMealAddon: nights ? Math.round(mealTotal / nights) : 0,
-    baseTotal,
-    mealTotal,
+    baseTotal: baseAfterDiscount, // After discount
+    mealTotal: mealAfterDiscount, // After discount
     total,
+    baseBeforeDiscount: baseTotal,
+    mealBeforeDiscount: mealTotal,
+    totalDiscount,
+    roomDiscountAmount,
+    mealDiscountAmount,
     mealPlan,
     mealSchedule
   };
 }
 
-module.exports = { getRentForRoomDate, getBookingPricing, mealCount, getMealAddonForDate };
+module.exports = { getRentForRoomDate, getBookingPricing, mealCount, getMealAddonForDate, getMealRatesForDate, getMealCostForDate, calculateDiscountAmount };

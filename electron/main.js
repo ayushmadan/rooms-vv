@@ -2,11 +2,15 @@ const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+const net = require('net');
+const fs = require('fs');
 
 let mainWindow;
 let loadingWindow;
 let backendProcess;
 let isQuitting = false;
+let backendRestartCount = 0;
+const MAX_BACKEND_RESTARTS = 3;
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -24,8 +28,80 @@ app.on('second-instance', () => {
   }
 });
 
-function startBackend() {
+// Check if a port is available
+function checkPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        resolve(false);
+      }
+    });
+
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+
+    server.listen(port);
+  });
+}
+
+// Kill process on a specific port (cross-platform)
+async function killPortProcess(port) {
+  return new Promise((resolve) => {
+    const isWindows = process.platform === 'win32';
+    const command = isWindows
+      ? `FOR /F "tokens=5" %P IN ('netstat -ano ^| findstr :${port}') DO taskkill /F /PID %P`
+      : `lsof -ti:${port} | xargs kill -9`;
+
+    const shell = isWindows ? 'cmd.exe' : '/bin/sh';
+    const args = isWindows ? ['/c', command] : ['-c', command];
+
+    const proc = spawn(shell, args, { stdio: 'ignore' });
+    proc.on('close', () => {
+      console.log(`Attempted to kill process on port ${port}`);
+      setTimeout(resolve, 500); // Wait a bit for port to be released
+    });
+    proc.on('error', () => resolve()); // Ignore errors, port might not be in use
+  });
+}
+
+async function startBackend() {
   console.log('Starting backend server...');
+
+  // Check if port 4000 is available
+  const portAvailable = await checkPortAvailable(4000);
+
+  if (!portAvailable) {
+    console.log('Port 4000 is in use. Attempting to kill orphaned process...');
+    await killPortProcess(4000);
+
+    // Check again after killing
+    const stillInUse = !(await checkPortAvailable(4000));
+    if (stillInUse) {
+      console.error('Port 4000 is still in use after cleanup attempt');
+      backendRestartCount++;
+
+      if (backendRestartCount >= MAX_BACKEND_RESTARTS) {
+        dialog.showErrorBox(
+          'Port Conflict',
+          'Port 4000 is already in use and could not be freed.\n\n' +
+          'Another instance of the application may be running.\n\n' +
+          'Please:\n' +
+          '1. Close all instances of this application\n' +
+          '2. Restart your computer if the issue persists\n\n' +
+          'The application will now exit.'
+        );
+        app.quit();
+        return;
+      }
+    }
+  }
+
   backendProcess = spawn(process.execPath, [path.join(__dirname, '..', 'app/backend/src/index.js')], {
     stdio: 'inherit'
   });
@@ -33,8 +109,25 @@ function startBackend() {
   backendProcess.on('exit', (code) => {
     console.log(`Backend exited with code ${code}`);
     if (!isQuitting) {
-      console.log('Restarting backend in 1 second...');
-      setTimeout(startBackend, 1000);
+      backendRestartCount++;
+
+      if (backendRestartCount >= MAX_BACKEND_RESTARTS) {
+        console.error(`Backend failed to start after ${MAX_BACKEND_RESTARTS} attempts`);
+        dialog.showErrorBox(
+          'Backend Startup Failed',
+          `The backend server failed to start after ${MAX_BACKEND_RESTARTS} attempts.\n\n` +
+          'This may be due to:\n' +
+          '- MongoDB not running\n' +
+          '- Port 4000 being used by another application\n' +
+          '- Missing dependencies\n\n' +
+          'The application will now exit.'
+        );
+        app.quit();
+        return;
+      }
+
+      console.log(`Restarting backend in 5 seconds... (attempt ${backendRestartCount}/${MAX_BACKEND_RESTARTS})`);
+      setTimeout(startBackend, 5000); // Increased cooldown to 5 seconds
     }
   });
 
@@ -166,6 +259,10 @@ async function createWindow() {
     console.log('Waiting for backend to be ready...');
     await checkBackendReady();
 
+    // Reset restart count on successful backend startup
+    backendRestartCount = 0;
+    console.log('Backend is healthy. Reset restart counter.');
+
     console.log('Creating main window...');
     mainWindow = new BrowserWindow({
       width: 1280,
@@ -217,8 +314,85 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+// First-run setup: ensure MongoDB and .env are configured
+async function runFirstTimeSetup() {
+  const appPath = app.getAppPath();
+  const setupCompletedMarker = path.join(app.getPath('userData'), '.setup-completed');
+  const envPath = path.join(appPath, '.env');
+
+  // Check if setup has already been completed
+  if (fs.existsSync(setupCompletedMarker) && fs.existsSync(envPath)) {
+    console.log('Setup already completed, skipping first-run setup');
+    return;
+  }
+
+  console.log('Running first-time setup...');
+
+  // Only run setup on Windows
+  if (process.platform === 'win32') {
+    const postInstallScript = path.join(appPath, 'scripts', 'windows', 'post-install.ps1');
+
+    if (fs.existsSync(postInstallScript)) {
+      return new Promise((resolve) => {
+        console.log('Executing post-install setup script...');
+
+        const setupProcess = spawn('powershell.exe', [
+          '-ExecutionPolicy', 'Bypass',
+          '-NoProfile',
+          '-File', postInstallScript,
+          '-InstallDir', appPath
+        ], {
+          stdio: 'inherit',
+          shell: true
+        });
+
+        setupProcess.on('close', (code) => {
+          if (code === 0) {
+            console.log('First-time setup completed successfully');
+            // Create marker file to indicate setup is complete
+            fs.writeFileSync(setupCompletedMarker, new Date().toISOString());
+          } else {
+            console.log(`Setup script exited with code ${code}`);
+          }
+          resolve();
+        });
+
+        setupProcess.on('error', (err) => {
+          console.error('Failed to run setup script:', err.message);
+          resolve(); // Continue anyway
+        });
+
+        // Timeout after 3 minutes
+        setTimeout(() => {
+          console.log('Setup script timeout - continuing...');
+          setupProcess.kill();
+          resolve();
+        }, 180000);
+      });
+    } else {
+      console.log('Post-install script not found, skipping automated setup');
+    }
+  }
+
+  // For non-Windows or if script doesn't exist, just ensure .env exists
+  if (!fs.existsSync(envPath)) {
+    const envExamplePath = path.join(appPath, '.env.example');
+    if (fs.existsSync(envExamplePath)) {
+      fs.copyFileSync(envExamplePath, envPath);
+      console.log('Created .env from .env.example');
+    }
+  }
+
+  // Mark setup as completed
+  fs.writeFileSync(setupCompletedMarker, new Date().toISOString());
+}
+
+app.whenReady().then(async () => {
   console.log('Electron app ready');
+
+  // Run first-time setup if needed
+  await runFirstTimeSetup();
+
   createLoadingWindow();
   startBackend();
   createWindow();
@@ -227,7 +401,16 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   isQuitting = true;
   if (backendProcess && !backendProcess.killed) {
-    backendProcess.kill();
+    console.log('Sending SIGTERM to backend for graceful shutdown...');
+    backendProcess.kill('SIGTERM');
+
+    // Force kill if graceful shutdown takes too long
+    setTimeout(() => {
+      if (backendProcess && !backendProcess.killed) {
+        console.log('Force killing backend process');
+        backendProcess.kill('SIGKILL');
+      }
+    }, 5000);
   }
   if (process.platform !== 'darwin') app.quit();
 });

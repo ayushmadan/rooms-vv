@@ -32,6 +32,9 @@
             <input id="adminPin" type="password" placeholder="PIN" />
           </label>
           <span id="adminState" class="badge warn">Admin Mode Inactive</span>
+          <span id="healthIndicator" class="health-indicator" title="System Health">
+            <span class="health-dot"></span> System
+          </span>
           <span id="versionInfo" class="badge ok">Version -</span>
         </div>
       </header>
@@ -82,6 +85,16 @@
               <button type="button" id="copyCustomerBtn" class="btn btn-outline">Copy Customer Details</button>
               <button type="button" id="pasteCustomerBtn" class="btn btn-outline">Paste Customer Details</button>
             </div>
+
+            <!-- Customer Search by Phone -->
+            <div class="row row-2" style="margin-bottom: 1rem;">
+              <label>Search by Phone <input id="searchCustomerPhone" type="tel" placeholder="Enter phone number" /></label>
+              <div style="display: flex; align-items: flex-end;">
+                <button type="button" id="searchCustomerBtn" class="btn btn-outline">Search Customer</button>
+              </div>
+            </div>
+            <p id="customerSearchStatus" class="status"></p>
+
             <div class="row row-2">
               <label>Full Name <input name="fullName" required /></label>
               <label>Phone <input name="phone" required /></label>
@@ -101,7 +114,7 @@
             <label id="idTypeOtherWrap" class="hidden">Other ID Type <input id="idTypeOther" /></label>
             <label>ID Number <input name="idNumber" required /></label>
 
-            <h3>Pricing & Meals</h3>
+            <h3>Pricing</h3>
             <div class="row row-3">
               <label>Selected Units <input id="selectedUnitText" readonly placeholder="Select one or more tiles" /></label>
               <label>Rent / Night (Rs) <input id="nightlyRent" type="number" min="0" step="1" required /></label>
@@ -115,12 +128,44 @@
               </label>
             </div>
             <div class="row row-2">
-              <label>Advance Collected (Rs) <input id="advancePaid" type="number" min="0" step="1" value="0" /></label>
               <label>Notes <input id="bookingNotes" /></label>
             </div>
 
+            <h3>Advance Payment</h3>
+            <div class="row row-2">
+              <label>Advance Collected (Rs) <input id="advancePaid" type="number" min="0" step="1" value="0" /></label>
+            </div>
+
+            <h3>Meal Selection</h3>
             <div class="sub-title">Meal Planner by Date</div>
             <div id="mealPlanner" class="meal-planner"></div>
+
+            <h3>Discounts (Optional)</h3>
+            <div class="row row-2">
+              <label>Room Discount Type
+                <select id="roomDiscountType">
+                  <option value="NONE">No Discount</option>
+                  <option value="PERCENTAGE">Percentage (%)</option>
+                  <option value="AMOUNT">Fixed Amount (Rs)</option>
+                </select>
+              </label>
+              <label>Room Discount Value
+                <input id="roomDiscountValue" type="number" min="0" step="0.01" value="0" placeholder="0" />
+              </label>
+            </div>
+            <div class="row row-2">
+              <label>Meal Discount Type
+                <select id="mealDiscountType">
+                  <option value="NONE">No Discount</option>
+                  <option value="PERCENTAGE">Percentage (%)</option>
+                  <option value="AMOUNT">Fixed Amount (Rs)</option>
+                </select>
+              </label>
+              <label>Meal Discount Value
+                <input id="mealDiscountValue" type="number" min="0" step="0.01" value="0" placeholder="0" />
+              </label>
+            </div>
+            <p class="hint" style="font-size: 0.85rem; color: #666; margin-top: -8px;">Note: Discounts apply only to rooms and meals, not extra items.</p>
 
             <input type="hidden" id="roomIdField" />
             <button type="submit" class="btn">Create Booking</button>
@@ -199,32 +244,7 @@
                 <label>New Check-out <input id="moveCheckOut" type="date" /></label>
               </div>
               <button id="moveBookingBtn" class="btn">Move Booking</button>
-
-              <h4 style="margin-top: 16px;">Payments</h4>
-            <div class="row row-2">
-              <label>Amount (Rs) <input id="paymentAmount" type="number" min="0" step="1" value="0" /></label>
-              <label>Mode
-                <select id="paymentModeUpdate">
-                  <option value="UPI">UPI</option>
-                  <option value="CASH">Cash</option>
-                  <option value="CREDIT_CARD">Credit Card</option>
-                  <option value="DEBIT_CARD">Debit Card</option>
-                </select>
-              </label>
-              <label>Type
-                <select id="paymentType">
-                  <option value="ADVANCE">Advance</option>
-                  <option value="SETTLEMENT">Settlement</option>
-                  <option value="REFUND">Refund</option>
-                </select>
-              </label>
-              <label>Note <input id="paymentNote" /></label>
-            </div>
-            <div class="stack">
-              <button id="addPaymentBtn" class="btn">Record Payment</button>
-              <button id="markBillPaidBtn" class="btn btn-outline">Record Full Payment</button>
-            </div>
-            <p id="manageStatus" class="status"></p>
+              <p id="manageStatus" class="status"></p>
           </section>
 
           <section class="card panel">
@@ -257,25 +277,90 @@
       </section>
 
       <section class="tab-panel" data-tab-panel="billing">
-        <section class="card panel narrow">
-          <h2>Billing</h2>
-          <label>Booking ID <input id="billingBookingId" /></label>
-          <div class="sub-title">Extra Item Label</div>
-          <div class="chip-group">
-            <label><input type="radio" name="extraLabelRadio" value="Food" checked /> Food</label>
-            <label><input type="radio" name="extraLabelRadio" value="Laundry" /> Laundry</label>
-            <label><input type="radio" name="extraLabelRadio" value="Service" /> Service</label>
-            <label><input type="radio" name="extraLabelRadio" value="Other" /> Other</label>
-          </div>
-          <label id="extraOtherWrap" class="hidden">Other Label <input id="extraOtherLabel" /></label>
-          <label>Amount (Rs) <input id="extraAmount" type="number" min="0" step="1" value="0" /></label>
-          <div class="stack">
-            <button id="generateBillBtn" class="btn">Generate Bill PDF</button>
-            <button id="openBillBtn" class="btn btn-outline">Open/Print Bill</button>
-            <button id="declarationBtn" class="btn btn-outline">Open/Print Declaration</button>
-          </div>
-          <p id="billStatus" class="status"></p>
-        </section>
+        <div class="two-col">
+          <!-- Left Panel: Room tiles for booking selection -->
+          <section class="card panel">
+            <h2>Select Booking</h2>
+            <div class="row row-2">
+              <label>From <input id="billingFromDate" type="date" /></label>
+              <label>To <input id="billingToDate" type="date" /></label>
+            </div>
+            <div id="billingRoomsGrid" class="rooms-grid"></div>
+          </section>
+
+          <!-- Right Panel: Payments & Billing -->
+          <section class="card panel">
+            <!-- Selected Booking Info Card -->
+            <div id="selectedPaymentInfo" class="card" style="background: #f3f4f6; padding: 1rem; margin-bottom: 1rem; display: none;">
+              <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem;">Selected Booking</h3>
+              <div style="display: grid; gap: 0.5rem; font-size: 0.9rem;">
+                <div><strong>Booking ID:</strong> <span id="selectedPaymentBookingId">-</span></div>
+                <div><strong>Customer:</strong> <span id="selectedPaymentCustomer">-</span></div>
+                <div><strong>Unit:</strong> <span id="selectedPaymentUnit">-</span></div>
+                <div><strong>Total Due:</strong> <span id="selectedPaymentDue" style="color: #dc2626;">-</span></div>
+                <div><strong>Total Paid:</strong> <span id="selectedPaymentPaid" style="color: #16a34a;">-</span></div>
+                <div><strong>Outstanding:</strong> <span id="selectedPaymentOutstanding" style="color: #ea580c;">-</span></div>
+              </div>
+            </div>
+
+            <!-- Payments Section (moved from Operations) -->
+            <h2>Payments</h2>
+            <div class="row row-2">
+              <label>Amount (Rs) <input id="paymentAmount" type="number" min="0" step="1" value="0" /></label>
+              <label>Mode
+                <select id="paymentModeUpdate">
+                  <option value="UPI">UPI</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CREDIT_CARD">Credit Card</option>
+                  <option value="DEBIT_CARD">Debit Card</option>
+                </select>
+              </label>
+              <label>Type
+                <select id="paymentType">
+                  <option value="ADVANCE">Advance</option>
+                  <option value="SETTLEMENT" selected>Settlement</option>
+                  <option value="REFUND">Refund</option>
+                </select>
+              </label>
+              <label>Note <input id="paymentNote" /></label>
+            </div>
+            <div class="stack">
+              <button id="addPaymentBtn" class="btn">Record Payment</button>
+              <button id="markBillPaidBtn" class="btn btn-outline">Mark Bill as Fully Paid</button>
+            </div>
+            <p id="paymentStatus" class="status"></p>
+
+            <!-- Billing Section -->
+            <h2 style="margin-top: 2rem;">Generate Bill</h2>
+
+            <!-- Add Extra Items -->
+            <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Add Extra Items</h3>
+            <div class="sub-title">Item Category</div>
+            <div class="chip-group">
+              <label><input type="radio" name="extraLabelRadio" value="Food" checked /> Food</label>
+              <label><input type="radio" name="extraLabelRadio" value="Laundry" /> Laundry</label>
+              <label><input type="radio" name="extraLabelRadio" value="Service" /> Service</label>
+              <label><input type="radio" name="extraLabelRadio" value="Other" /> Other</label>
+            </div>
+            <label id="extraOtherWrap" class="hidden">Other Label <input id="extraOtherLabel" /></label>
+            <label>Amount (Rs) <input id="extraAmount" type="number" min="0" step="1" value="0" /></label>
+            <button id="addExtraItemBtn" class="btn btn-outline">Add Item to List</button>
+
+            <!-- Extra Items List -->
+            <div id="extraItemsListWrap" style="margin-top: 1rem; display: none;">
+              <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem;">Extra Items Added:</h4>
+              <div id="extraItemsList" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+            </div>
+
+            <!-- Bill Generation -->
+            <div class="stack" style="margin-top: 1.5rem;">
+              <button id="generateBillBtn" class="btn">Generate Bill PDF</button>
+              <button id="openBillBtn" class="btn btn-outline">Open/Print Bill</button>
+              <button id="declarationBtn" class="btn btn-outline">Open/Print Declaration</button>
+            </div>
+            <p id="billStatus" class="status"></p>
+          </section>
+        </div>
       </section>
 
       <section class="tab-panel" data-tab-panel="admin">
@@ -287,17 +372,24 @@
               <label>Large Room Rate (Rs/night) <input id="defBig" type="number" min="0" /></label>
               <label>Party Hall Rate (Rs/night) <input id="defParty" type="number" min="0" /></label>
               <label>Dining Hall Rate (Rs/night) <input id="defDining" type="number" min="0" /></label>
-              <label>Meal Addon Rate (Rs/day) <input id="defMeal" type="number" min="0" /></label>
+              <label>Breakfast Rate (Rs) <input id="defBreakfast" type="number" min="0" /></label>
+              <label>Lunch Rate (Rs) <input id="defLunch" type="number" min="0" /></label>
+              <label>Dinner Rate (Rs) <input id="defDinner" type="number" min="0" /></label>
               <label>GST % (inclusive) <input id="defGst" type="number" min="0" step="0.01" /></label>
             </div>
             <button id="saveDefaultsBtn" class="btn">Save Pricing Configuration</button>
 
             <h3>Specific Date Overrides</h3>
             <div class="row row-2">
-              <label>Unit ID <input id="configRoomId" /></label>
+              <label>Unit ID <input id="configRoomId" placeholder="For room rate override" /></label>
               <label>Date <input id="configDate" type="date" /></label>
-              <label>Unit Rent (Rs) <input id="configRent" type="number" min="0" /></label>
-              <label>Meal Addon/day (Rs) <input id="configMealRate" type="number" min="0" /></label>
+              <label>Unit Rent (Rs) <input id="configRent" type="number" min="0" placeholder="Optional" /></label>
+            </div>
+            <div class="sub-title">Meal Rate Overrides for Date</div>
+            <div class="row row-2">
+              <label>Breakfast (Rs) <input id="configBreakfast" type="number" min="0" placeholder="Optional" /></label>
+              <label>Lunch (Rs) <input id="configLunch" type="number" min="0" placeholder="Optional" /></label>
+              <label>Dinner (Rs) <input id="configDinner" type="number" min="0" placeholder="Optional" /></label>
             </div>
             <button id="saveRateBtn" class="btn">Save Date Overrides</button>
             <p id="configStatus" class="status"></p>
@@ -318,8 +410,50 @@
                 <label>To <input id="ledgerTo" type="date" /></label>
               </div>
               <button id="loadLedgerBtn" class="btn">Load Ledger Report</button>
-              <pre id="ledgerSummary" class="quote"></pre>
-              <div id="ledgerRows" class="list-box"></div>
+
+              <!-- Summary Cards -->
+              <div id="ledgerSummaryCards" class="row row-3" style="margin-top: 1rem; display: none;">
+                <div class="card" style="padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.8rem; color: #666; margin-bottom: 0.25rem;">Bookings/Bills</div>
+                  <div id="summaryBookings" style="font-size: 1.25rem; font-weight: 600; color: #2563eb;">-</div>
+                </div>
+                <div class="card" style="padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.8rem; color: #666; margin-bottom: 0.25rem;">Total Due</div>
+                  <div id="summaryDue" style="font-size: 1.25rem; font-weight: 600; color: #dc2626;">-</div>
+                </div>
+                <div class="card" style="padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.8rem; color: #666; margin-bottom: 0.25rem;">Total Paid</div>
+                  <div id="summaryPaid" style="font-size: 1.25rem; font-weight: 600; color: #16a34a;">-</div>
+                </div>
+                <div class="card" style="padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.8rem; color: #666; margin-bottom: 0.25rem;">Outstanding</div>
+                  <div id="summaryOutstanding" style="font-size: 1.25rem; font-weight: 600; color: #ea580c;">-</div>
+                </div>
+              </div>
+
+              <!-- Ledger Table -->
+              <div id="ledgerTableContainer" style="margin-top: 1rem; overflow-x: auto; display: none;">
+                <table id="ledgerTable" style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                  <thead>
+                    <tr style="background: #f3f4f6; border-bottom: 2px solid #d1d5db;">
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Booking ID</th>
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Customer</th>
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Unit</th>
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Check-in</th>
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Check-out</th>
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Status</th>
+                      <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Payment</th>
+                      <th style="padding: 0.75rem; text-align: right; font-weight: 600;">Amount Due</th>
+                      <th style="padding: 0.75rem; text-align: right; font-weight: 600;">Paid</th>
+                      <th style="padding: 0.75rem; text-align: right; font-weight: 600;">Outstanding</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ledgerTableBody">
+                    <!-- Rows will be populated by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+
               <p id="ledgerStatus" class="status"></p>
             </section>
           </section>
@@ -385,8 +519,17 @@
 
         <label>Full Name <input id="checkinName" /></label>
         <label>Phone <input id="checkinPhone" /></label>
-        <label>ID Type <input id="checkinIdType" readonly /></label>
-        <label>ID Number <input id="checkinIdNumber" readonly /></label>
+        <label>ID Type
+          <select id="checkinIdType">
+            <option value="AADHAAR">Aadhaar</option>
+            <option value="PASSPORT">Passport</option>
+            <option value="DRIVING_LICENSE">Driving License</option>
+            <option value="VOTER_ID">Voter ID</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </label>
+        <label id="checkinIdTypeOtherWrap" class="hidden">Other ID Type <input id="checkinIdTypeOther" /></label>
+        <label>ID Number <input id="checkinIdNumber" /></label>
         <label>Address <input id="checkinAddress" /></label>
 
         <p id="checkinModalError" class="status" style="color: #a4372f; display: none; margin-top: 8px;"></p>

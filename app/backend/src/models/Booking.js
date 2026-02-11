@@ -42,7 +42,18 @@ const bookingSchema = new mongoose.Schema(
     pricingSnapshot: {
       nightlyBase: { type: Number, default: 0 },
       nightlyMealAddon: { type: Number, default: 0 },
-      estimatedTotal: { type: Number, default: 0 }
+      estimatedTotal: { type: Number, default: 0 },
+      baseBeforeDiscount: { type: Number, default: 0 },
+      mealBeforeDiscount: { type: Number, default: 0 },
+      totalDiscount: { type: Number, default: 0 }
+    },
+    discounts: {
+      roomDiscountType: { type: String, enum: ['NONE', 'PERCENTAGE', 'AMOUNT'], default: 'NONE' },
+      roomDiscountValue: { type: Number, default: 0 },
+      roomDiscountAmount: { type: Number, default: 0 },
+      mealDiscountType: { type: String, enum: ['NONE', 'PERCENTAGE', 'AMOUNT'], default: 'NONE' },
+      mealDiscountValue: { type: Number, default: 0 },
+      mealDiscountAmount: { type: Number, default: 0 }
     },
     status: {
       type: String,

@@ -21,6 +21,20 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+router.get('/search', async (req, res, next) => {
+  try {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ message: 'Phone number is required' });
+
+    const customer = await Customer.findOne({ phone: phone.trim() }).lean();
+    if (!customer) return res.status(404).json({ message: 'Customer not found with this phone number' });
+
+    res.json(customer);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/', upload.single('photoId'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'photoId file is required' });

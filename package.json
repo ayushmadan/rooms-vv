@@ -1,6 +1,6 @@
 {
   "name": "rooms-vv",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Offline-first room allocation desktop app",
   "author": "Ayush Madan",
   "main": "electron/main.js",
@@ -17,42 +17,7 @@
     "backup:run": "node app/backend/src/services/backup.service.js"
   },
   "build": {
-    "appId": "com.viravillas.rooms",
-    "productName": "Vira Villas Rooms",
-    "icon": "build/icon.png",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "electron/**/*",
-      "app/**/*",
-      "scripts/**/*",
-      "node_modules/**/*",
-      "package.json",
-      "package-lock.json",
-      ".env.example"
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "msi",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "artifactName": "ViraVillasRooms-${version}-Setup.${ext}"
-    },
-    "msi": {
-      "oneClick": false,
-      "perMachine": true,
-      "runAfterFinish": false
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ]
-    }
+    "extends": "./electron-builder.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

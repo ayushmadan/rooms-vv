@@ -111,6 +111,36 @@ input, select, button {
   background: #8d2f26;
 }
 
+.health-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f0f4f8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.health-indicator:hover {
+  background: #e5ecf3;
+}
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+.health-indicator.unhealthy .health-dot {
+  background: #ef4444;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 input:focus, select:focus {
   outline: none;
   border-color: var(--brand);
@@ -168,9 +198,21 @@ input:read-only {
   border-color: #d4a574;
   background: #fdf9f3;
 }
-.room-tile.needs-cleaning {
+.room-tile.checked-in {
+  border-color: #2d5f3f;
+  background: #e8f5ed;
+}
+.room-tile.checked-in:hover {
+  border-color: #1f4a2f;
+}
+.room-tile.needs-cleaning,
+.room-tile.checked-out {
   border-color: #d9b358;
   background: #fffaeb;
+}
+.room-tile.needs-cleaning:hover,
+.room-tile.checked-out:hover {
+  border-color: #b8963f;
 }
 .room-tile.selected {
   border: 2.5px solid var(--accent);

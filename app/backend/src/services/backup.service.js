@@ -5,6 +5,7 @@ const { createObjectCsvWriter } = require('csv-writer');
 const Booking = require('../models/Booking');
 const Room = require('../models/Room');
 const Customer = require('../models/Customer');
+const Bill = require('../models/Bill');
 const { outputDir } = require('../config/env');
 const { formatYmd, formatIstDateTime } = require('../utils/date');
 const { uploadToDrive } = require('./drive.service');
@@ -30,17 +31,42 @@ async function buildRows(start, end) {
   const roomsById = new Map(roomMap.map((r) => [String(r._id), r]));
   const customersById = new Map(customerMap.map((c) => [String(c._id), c]));
 
+  // Fetch bills for all bookings
+  const bookingIds = bookings.map((b) => b._id);
+  const bills = await Bill.find({ bookingId: { $in: bookingIds } }).lean();
+  const billsByBookingId = new Map(bills.map((bill) => [String(bill.bookingId), bill]));
+
   return bookings.map((b) => {
     const room = roomsById.get(String(b.roomId));
     const customer = customersById.get(String(b.customerId));
+    const bill = billsByBookingId.get(String(b._id));
+
+    // Calculate bill items summary
+    const billItems = bill?.lineItems?.map((item) => `${item.label}: Rs${item.amount}`).join('; ') || 'No bill';
+
+    // Calculate outstanding amount
+    const totalDue = b.pricingSnapshot?.estimatedTotal || 0;
+    const totalPaid = b.totalPaid || 0;
+    const outstanding = Math.max(0, totalDue - totalPaid);
+
     return {
       bookingId: b.bookingCode || String(b._id),
       createdAtIst: formatIstDateTime(b.createdAt),
-      roomCode: room?.code || '',
       customerName: customer?.fullName || '',
+      customerPhone: customer?.phone || '',
+      customerEmail: customer?.email || '',
+      roomCode: room?.code || '',
       checkInIst: formatIstDateTime(b.checkInDate),
       checkOutIst: formatIstDateTime(b.checkOutDate),
-      status: b.status
+      status: b.status,
+      paymentStatus: b.paymentStatus || 'UNPAID',
+      totalDue: totalDue,
+      totalPaid: totalPaid,
+      outstanding: outstanding,
+      advancePaid: b.advancePaid || 0,
+      billAmount: bill?.totalAmount || 0,
+      billItems: billItems,
+      notes: b.notes || ''
     };
   });
 }
@@ -53,11 +79,21 @@ async function writeBackupCsv(fileName, rows) {
     header: [
       { id: 'bookingId', title: 'BOOKING_ID' },
       { id: 'createdAtIst', title: 'CREATED_AT_IST' },
-      { id: 'roomCode', title: 'ROOM_CODE' },
       { id: 'customerName', title: 'CUSTOMER_NAME' },
+      { id: 'customerPhone', title: 'CUSTOMER_PHONE' },
+      { id: 'customerEmail', title: 'CUSTOMER_EMAIL' },
+      { id: 'roomCode', title: 'ROOM_CODE' },
       { id: 'checkInIst', title: 'CHECKIN_IST' },
       { id: 'checkOutIst', title: 'CHECKOUT_IST' },
-      { id: 'status', title: 'STATUS' }
+      { id: 'status', title: 'STATUS' },
+      { id: 'paymentStatus', title: 'PAYMENT_STATUS' },
+      { id: 'totalDue', title: 'TOTAL_DUE' },
+      { id: 'totalPaid', title: 'TOTAL_PAID' },
+      { id: 'outstanding', title: 'OUTSTANDING' },
+      { id: 'advancePaid', title: 'ADVANCE_PAID' },
+      { id: 'billAmount', title: 'BILL_AMOUNT' },
+      { id: 'billItems', title: 'BILL_ITEMS' },
+      { id: 'notes', title: 'NOTES' }
     ]
   });
 

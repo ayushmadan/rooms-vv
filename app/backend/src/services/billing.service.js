@@ -29,15 +29,31 @@ async function generateBill(bookingId, extras = []) {
     booking.checkOutDate,
     booking.mealPlan || {},
     booking.pricingSnapshot?.nightlyBase || null,
-    booking.mealSchedule || []
+    booking.mealSchedule || [],
+    booking.discounts || {}
   );
 
-  const lineItems = [{ label: `Base stay charges (${quote.nights} night(s))`, amount: quote.baseTotal, category: 'ROOM' }];
+  const lineItems = [];
 
-  if (quote.mealTotal > 0) {
-    lineItems.push({ label: 'Meals (as selected by date)', amount: quote.mealTotal, category: 'FOOD' });
+  // Add base charges (before discount if applicable)
+  if (booking.discounts && booking.discounts.roomDiscountType !== 'NONE' && quote.baseBeforeDiscount) {
+    lineItems.push({ label: `Base stay charges (${quote.nights} night(s)) - Before Discount`, amount: quote.baseBeforeDiscount, category: 'ROOM' });
+    lineItems.push({ label: `Room Discount (${booking.discounts.roomDiscountType === 'PERCENTAGE' ? booking.discounts.roomDiscountValue + '%' : 'Rs ' + booking.discounts.roomDiscountValue})`, amount: -quote.roomDiscountAmount, category: 'ROOM' });
+  } else {
+    lineItems.push({ label: `Base stay charges (${quote.nights} night(s))`, amount: quote.baseTotal, category: 'ROOM' });
   }
 
+  // Add meal charges (before discount if applicable)
+  if (quote.mealTotal > 0 || quote.mealBeforeDiscount > 0) {
+    if (booking.discounts && booking.discounts.mealDiscountType !== 'NONE' && quote.mealBeforeDiscount) {
+      lineItems.push({ label: 'Meals (as selected by date) - Before Discount', amount: quote.mealBeforeDiscount, category: 'FOOD' });
+      lineItems.push({ label: `Meal Discount (${booking.discounts.mealDiscountType === 'PERCENTAGE' ? booking.discounts.mealDiscountValue + '%' : 'Rs ' + booking.discounts.mealDiscountValue})`, amount: -quote.mealDiscountAmount, category: 'FOOD' });
+    } else if (quote.mealTotal > 0) {
+      lineItems.push({ label: 'Meals (as selected by date)', amount: quote.mealTotal, category: 'FOOD' });
+    }
+  }
+
+  // Add extra items (no discounts applied as per Task 16)
   lineItems.push(...extras.map((item) => ({ ...item, amount: Number(item.amount || 0) })));
 
   const totalAmount = lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -94,9 +110,11 @@ function writeBillPdf({ pdfPath, bookingId, customer, room, booking, lineItems, 
     const stream = fs.createWriteStream(pdfPath);
     doc.pipe(stream);
 
+    // Optimized: Reduced header height from 64 to 56
     drawBrandHeader(doc, 'Tax Invoice');
 
-    const metaTop = 118;
+    // Optimized: Reduced meta box from 112 to 96, moved closer to header
+    const metaTop = 106;
     drawMetaRow(doc, 36, metaTop, 523, [
       ['Booking Ref', bookingId],
       ['Customer', customer?.fullName || '-'],
@@ -104,21 +122,23 @@ function writeBillPdf({ pdfPath, bookingId, customer, room, booking, lineItems, 
       ['Check-in (IST)', formatIstDateTime(booking.checkInDate)],
       ['Check-out (IST)', formatIstDateTime(booking.checkOutDate)],
       ['Generated', formatIstDateTime(new Date())]
-    ]);
+    ], lineItems.length);
 
-    const tableTop = 248;
-    const tableBottom = 650;
-    drawTable(doc, 36, tableTop, 523, tableBottom - tableTop, ['Description', 'Category', 'Amount (Rs)'], lineItems.map((i) => [i.label, i.category, Number(i.amount).toFixed(2)]));
+    // Optimized: Adjust table position and height based on line item count
+    const tableTop = 216;
+    const tableBottom = 680; // Increased from 650 to allow more rows
+    drawTable(doc, 36, tableTop, 523, tableBottom - tableTop, ['Description', 'Category', 'Amount (Rs)'], lineItems.map((i) => [i.label, i.category, Number(i.amount).toFixed(2)]), lineItems.length);
 
-    doc.font('Helvetica').fontSize(10).fillColor('#1f2f3f');
-    let y = 670;
+    // Optimized: Reduced spacing in totals section
+    doc.font('Helvetica').fontSize(9).fillColor('#1f2f3f');
+    let y = 690;
     doc.text(`Amount Before GST: Rs ${subtotalBeforeGst.toFixed(2)}`, 360, y, { width: 199, align: 'right' });
-    y += 16;
+    y += 14;
     doc.text(`GST (${gstPercent}%): Rs ${gstAmount.toFixed(2)}`, 360, y, { width: 199, align: 'right' });
-    y += 18;
-    doc.font('Helvetica-Bold').fontSize(12).text(`Grand Total (Inclusive): Rs ${totalAmount.toFixed(2)}`, 320, y, { width: 239, align: 'right' });
+    y += 16;
+    doc.font('Helvetica-Bold').fontSize(11).text(`Grand Total (Inclusive): Rs ${totalAmount.toFixed(2)}`, 320, y, { width: 239, align: 'right' });
 
-    doc.font('Helvetica').fontSize(9).fillColor('#4a5967').text('Thank you for choosing Vira Villas.', 36, 804, { width: 523, align: 'center' });
+    doc.font('Helvetica').fontSize(8).fillColor('#4a5967').text('Thank you for choosing Vira Villas.', 36, 810, { width: 523, align: 'center' });
 
     doc.end();
     stream.on('finish', resolve);
@@ -127,48 +147,68 @@ function writeBillPdf({ pdfPath, bookingId, customer, room, booking, lineItems, 
 }
 
 function drawBrandHeader(doc, subtitle) {
-  doc.rect(36, 36, 523, 64).fill('#0b3f5a');
-  if (fs.existsSync(LOGO_PATH)) doc.image(LOGO_PATH, 46, 45, { width: 46, height: 46 });
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('Vira Villas', 102, 48);
-  doc.font('Helvetica').fontSize(11).text(subtitle, 102, 74);
+  // Optimized: Reduced height from 64 to 56
+  doc.rect(36, 36, 523, 56).fill('#0b3f5a');
+  if (fs.existsSync(LOGO_PATH)) doc.image(LOGO_PATH, 46, 42, { width: 42, height: 42 });
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(20).text('Vira Villas', 98, 44);
+  doc.font('Helvetica').fontSize(10).text(subtitle, 98, 68);
 }
 
-function drawMetaRow(doc, x, y, width, pairs) {
-  doc.rect(x, y, width, 112).lineWidth(1).strokeColor('#b8c9d5').stroke();
-  let ty = y + 8;
+function drawMetaRow(doc, x, y, width, pairs, itemCount = 0) {
+  // Optimized: Reduced height from 112 to 96, reduced row spacing from 32 to 28
+  doc.rect(x, y, width, 96).lineWidth(1).strokeColor('#b8c9d5').stroke();
+  let ty = y + 6;
+  const fontSize = itemCount > 25 ? 7 : 8; // Use smaller font if many items
   pairs.forEach(([k, v], idx) => {
     const col = idx % 2;
     const row = Math.floor(idx / 2);
-    const tx = x + 12 + col * (width / 2);
-    ty = y + 8 + row * 32;
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#2a4252').text(`${k}:`, tx, ty);
-    doc.font('Helvetica').fontSize(9).fillColor('#1f2f3f').text(String(v), tx + 80, ty, { width: width / 2 - 90 });
+    const tx = x + 10 + col * (width / 2);
+    ty = y + 6 + row * 28;
+    doc.font('Helvetica-Bold').fontSize(fontSize).fillColor('#2a4252').text(`${k}:`, tx, ty);
+    doc.font('Helvetica').fontSize(fontSize).fillColor('#1f2f3f').text(String(v), tx + 75, ty, { width: width / 2 - 85 });
   });
 }
 
-function drawTable(doc, x, y, width, height, headers, rows) {
+function drawTable(doc, x, y, width, height, headers, rows, itemCount = 0) {
   const colWidths = [width * 0.6, width * 0.2, width * 0.2];
   doc.rect(x, y, width, height).lineWidth(1).strokeColor('#b8c9d5').stroke();
-  doc.rect(x, y, width, 28).fill('#0f4e6f');
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10);
 
-  let cursorX = x + 8;
+  // Optimized: Reduced header height from 28 to 24
+  const headerH = 24;
+  doc.rect(x, y, width, headerH).fill('#0f4e6f');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
+
+  let cursorX = x + 6;
   headers.forEach((h, i) => {
-    doc.text(h, cursorX, y + 9, { width: colWidths[i] - 12 });
+    doc.text(h, cursorX, y + 7, { width: colWidths[i] - 10 });
     cursorX += colWidths[i];
   });
 
   doc.strokeColor('#d6e0e8').lineWidth(0.8);
-  let rowY = y + 28;
-  const rowH = 24;
+  let rowY = y + headerH;
+
+  // Optimized: Dynamic row height and font size based on item count
+  // 20px rows can fit ~23 items, 18px rows can fit ~26 items, 16px for 30+ items
+  const rowH = itemCount > 30 ? 16 : itemCount > 25 ? 18 : 20;
+  const fontSize = itemCount > 30 ? 6.5 : itemCount > 25 ? 7 : 8;
+  const paddingY = Math.floor(rowH / 3);
+
   rows.forEach((row, idx) => {
-    if (rowY + rowH > y + height) return;
+    if (rowY + rowH > y + height) {
+      // Pagination fallback: add indicator for remaining items
+      if (idx < rows.length) {
+        doc.font('Helvetica-Oblique').fontSize(7).fillColor('#888');
+        doc.text(`... and ${rows.length - idx} more items (see next page)`, x + 8, rowY + 5);
+      }
+      return;
+    }
+
     if (idx % 2 === 0) doc.rect(x, rowY, width, rowH).fill('#f7fafc');
 
-    let cx = x + 8;
-    doc.font('Helvetica').fontSize(9).fillColor('#1f2f3f');
+    let cx = x + 6;
+    doc.font('Helvetica').fontSize(fontSize).fillColor('#1f2f3f');
     row.forEach((cell, i) => {
-      doc.text(String(cell), cx, rowY + 7, { width: colWidths[i] - 12 });
+      doc.text(String(cell), cx, rowY + paddingY, { width: colWidths[i] - 10 });
       cx += colWidths[i];
     });
 
