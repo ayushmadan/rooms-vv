@@ -1,6 +1,6 @@
 {
   "name": "rooms-vv",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Offline-first room allocation desktop app",
   "author": "Ayush Madan",
   "main": "electron/main.js",
@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.viravillas.rooms",
     "productName": "Vira Villas Rooms",
-    "icon": "build/icon.ico",
+    "icon": "build/icon.png",
     "directories": {
       "output": "dist"
     },
@@ -41,7 +41,7 @@
           ]
         }
       ],
-      "artifactName": "VitraVillasRooms-${version}-Setup.${ext}"
+      "artifactName": "ViraVillasRooms-${version}-Setup.${ext}"
     },
     "msi": {
       "oneClick": false,
