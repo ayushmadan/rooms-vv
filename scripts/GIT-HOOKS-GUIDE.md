@@ -9,10 +9,11 @@ This repository uses Git hooks to automate version bumping and release creation.
 ### Pre-Commit Hook
 - Runs automatically when you execute `git commit`
 - Asks if you want to bump the version and create a release (y/n)
+- **Works in both VS Code and command line** - uses macOS dialogs in VS Code, terminal prompts in CLI
 - If **no**: proceeds with a normal commit (no version changes)
 - If **yes**:
   - Shows current version
-  - Lets you choose: Patch, Minor, Major, or Custom version
+  - Lets you choose: Patch, Minor, or Major version
   - Updates `package.json` version
   - Stages the version change
   - Creates a marker for the post-commit hook
@@ -26,6 +27,25 @@ This repository uses Git hooks to automate version bumping and release creation.
 - Git is configured with `push.followTags = true`
 - When you run `git push`, tags are automatically pushed
 - Pushing a version tag triggers GitHub Actions to build and release
+
+## Using in VS Code
+
+The hooks work seamlessly with VS Code's Git integration:
+
+1. **Stage your changes** in VS Code's Source Control panel
+2. **Write commit message** in the message box
+3. **Click the Commit button** (or press Cmd+Enter)
+4. **Dialog appears** asking if you want to create a release
+   - Click **"No"** for normal commit
+   - Click **"Yes"** to bump version
+5. If you clicked Yes, **another dialog appears** with version options:
+   - Click **"Patch (X.Y.Z)"** for bug fixes
+   - Click **"Minor (X.Y.Z)"** for new features
+   - Click **"Major (X.Y.Z)"** for breaking changes
+6. **Notification appears** confirming the tag was created
+7. **Push** using VS Code's sync button or "Push" command
+
+The dialogs are native macOS alerts that appear on top of VS Code.
 
 ## Workflow Example
 
@@ -58,8 +78,7 @@ git commit -m "feat: add new booking feature"
 #   1) Patch   → 0.1.1 (bug fixes)
 #   2) Minor   → 0.2.0 (new features)
 #   3) Major   → 1.0.0 (breaking changes)
-#   4) Custom  → specify version
-# Enter choice (1-4): 2
+# Enter choice (1-3): 2
 
 # Version bumped to 0.2.0 ✓
 # Tag v0.2.0 will be created after commit ✓
@@ -83,11 +102,11 @@ Follow [Semantic Versioning](https://semver.org/):
 - **Minor** (0.1.0 → 0.2.0): New features, backwards compatible
 - **Major** (0.1.0 → 1.0.0): Breaking changes, major overhaul
 
-## Customizing Version
+## Version Bump Quick Reference
 
-If you choose option 4 (Custom), you can specify any version:
-- Must be in format `X.Y.Z` (e.g., `2.5.3`)
-- Can skip versions (e.g., `0.1.0` → `1.0.0`)
+- **Patch** (1-2 small bug fixes, typos, minor improvements)
+- **Minor** (new features, enhancements, multiple improvements)
+- **Major** (breaking changes, major overhaul, API changes)
 
 ## Checking Current Version
 
@@ -129,6 +148,11 @@ Or use the PowerShell release script:
 ### Hook doesn't run
 - Ensure hooks are executable: `chmod +x .git/hooks/pre-commit .git/hooks/post-commit`
 - Check Git config: `git config core.hooksPath` should be empty (uses default `.git/hooks`)
+
+### Dialogs don't appear in VS Code
+- Make sure you have permissions for VS Code to show notifications
+- Try committing from the terminal instead: `git commit -m "message"`
+- Check System Preferences → Notifications → Script Editor (macOS notifications)
 
 ### Tag already exists
 ```bash

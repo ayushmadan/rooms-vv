@@ -107,7 +107,22 @@ The application includes built-in update checking and installation:
 
 ### Creating New Releases
 
-For developers creating new releases:
+The repository has **automated release hooks** that make version bumping easy:
+
+#### Using Git Hooks (Recommended)
+
+1. **Make your changes** and stage them (`git add .`)
+2. **Commit normally** (`git commit -m "message"`)
+   - A dialog/prompt will ask if you want to create a release
+   - Choose **No** for normal commits
+   - Choose **Yes** for releases, then select version type (Patch/Minor/Major)
+3. **Push** (`git push`)
+   - The commit AND tag are pushed automatically
+   - GitHub Actions builds the MSI and creates the release
+
+See [Git Hooks Guide](scripts/GIT-HOOKS-GUIDE.md) for detailed workflow.
+
+#### Manual Release (Alternative)
 
 1. **Update Version**: Edit `package.json` version (e.g., `0.2.0`)
 2. **Create Git Tag**:
