@@ -108,18 +108,35 @@ REPO_BRANCH=$Branch
   Write-Output ".env file already exists"
 }
 
-# Step 4: Install Node dependencies (production only)
-Write-Output "`n[4/5] Installing dependencies..."
+# Step 4: Check Node dependencies
+Write-Output "`n[4/5] Checking dependencies..."
 
-if (Get-Command npm -ErrorAction SilentlyContinue) {
-  try {
-    npm install --omit=dev --silent
-    Write-Output "Dependencies installed successfully"
-  } catch {
-    Write-Output "Warning: npm install failed: $_"
-  }
+$nodeModulesPath = Join-Path $InstallDir "node_modules"
+
+if (Test-Path $nodeModulesPath) {
+  Write-Output "Dependencies already packaged with installation"
 } else {
-  Write-Output "Warning: npm not found. Please install Node.js from https://nodejs.org/"
+  Write-Output "Dependencies not found. Attempting to install..."
+
+  if (Get-Command npm -ErrorAction SilentlyContinue) {
+    try {
+      Write-Output "Running npm install (this may take a few minutes)..."
+      npm install --omit=dev 2>&1 | Out-Null
+
+      if ($LASTEXITCODE -eq 0) {
+        Write-Output "Dependencies installed successfully"
+      } else {
+        Write-Output "Warning: npm install completed with errors (exit code: $LASTEXITCODE)"
+      }
+    } catch {
+      Write-Output "Warning: npm install failed: $_"
+      Write-Output "You may need to run 'npm install' manually from: $InstallDir"
+    }
+  } else {
+    Write-Output "Warning: npm not found in PATH"
+    Write-Output "Dependencies are missing. Please ensure Node.js is installed and in PATH."
+    Write-Output "Then run 'npm install' from: $InstallDir"
+  }
 }
 
 # Step 5: Create Windows Task Scheduler entry for auto-start
