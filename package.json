@@ -9,6 +9,9 @@
     "dev:electron": "wait-on tcp:4000 && electron .",
     "start": "node app/backend/src/index.js",
     "build:msi": "electron-builder --win msi",
+    "build:msi:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/windows/build-msi.ps1",
+    "update:win": "powershell -ExecutionPolicy Bypass -File scripts/windows/update-app.ps1",
+    "mongo:ensure:win": "powershell -ExecutionPolicy Bypass -File scripts/windows/ensure-mongo.ps1 -InstallIfMissing",
     "build:mac": "electron-builder --mac",
     "backup:run": "node app/backend/src/services/backup.service.js"
   },
@@ -21,7 +24,9 @@
     "files": [
       "electron/**/*",
       "app/**/*",
-      "package.json"
+      "scripts/**/*",
+      "package.json",
+      ".env.example"
     ],
     "win": {
       "target": [
@@ -31,7 +36,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "VitraVillasRooms-${version}-Setup.${ext}"
     },
     "mac": {
       "target": [

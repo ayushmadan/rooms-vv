@@ -39,6 +39,9 @@ const el = {
   advancePaid: document.getElementById('advancePaid'),
   bookingNotes: document.getElementById('bookingNotes'),
   bookingStatus: document.getElementById('bookingStatus'),
+  checkUpdateBtn: document.getElementById('checkUpdateBtn'),
+  runUpdateBtn: document.getElementById('runUpdateBtn'),
+  versionInfo: document.getElementById('versionInfo'),
   roleSelect: document.getElementById('roleSelect'),
   adminPin: document.getElementById('adminPin'),
   adminState: document.getElementById('adminState'),
@@ -92,6 +95,7 @@ const el = {
   opFromDate: document.getElementById('opFromDate'),
   opToDate: document.getElementById('opToDate'),
   opRoomsGrid: document.getElementById('opRoomsGrid'),
+  selectedRoomIdForView: document.getElementById('selectedRoomIdForView'),
   opBookingList: document.getElementById('opBookingList'),
   opsPrevBtn: document.getElementById('opsPrevBtn'),
   opsNextBtn: document.getElementById('opsNextBtn'),
@@ -99,7 +103,32 @@ const el = {
   feedbackModal: document.getElementById('feedbackModal'),
   feedbackTitle: document.getElementById('feedbackTitle'),
   feedbackMessage: document.getElementById('feedbackMessage'),
-  feedbackCloseBtn: document.getElementById('feedbackCloseBtn')
+  feedbackCloseBtn: document.getElementById('feedbackCloseBtn'),
+  pinModal: document.getElementById('pinModal'),
+  pinModalInput: document.getElementById('pinModalInput'),
+  pinModalError: document.getElementById('pinModalError'),
+  pinModalCancel: document.getElementById('pinModalCancel'),
+  pinModalConfirm: document.getElementById('pinModalConfirm'),
+  checkinModal: document.getElementById('checkinModal'),
+  checkinUnit: document.getElementById('checkinUnit'),
+  checkinDateTime: document.getElementById('checkinDateTime'),
+  checkinBookingId: document.getElementById('checkinBookingId'),
+  checkinName: document.getElementById('checkinName'),
+  checkinPhone: document.getElementById('checkinPhone'),
+  checkinIdType: document.getElementById('checkinIdType'),
+  checkinIdNumber: document.getElementById('checkinIdNumber'),
+  checkinAddress: document.getElementById('checkinAddress'),
+  checkinModalError: document.getElementById('checkinModalError'),
+  checkinModalCancel: document.getElementById('checkinModalCancel'),
+  checkinModalConfirm: document.getElementById('checkinModalConfirm'),
+  selectedBookingPanel: document.getElementById('selectedBookingPanel'),
+  selectedBookingRef: document.getElementById('selectedBookingRef'),
+  selectedCustomerName: document.getElementById('selectedCustomerName'),
+  selectedCurrentUnit: document.getElementById('selectedCurrentUnit'),
+  selectedCheckIn: document.getElementById('selectedCheckIn'),
+  selectedCheckOut: document.getElementById('selectedCheckOut'),
+  selectedStatus: document.getElementById('selectedStatus'),
+  selectedPaymentInfo: document.getElementById('selectedPaymentInfo')
 };
 
 const api = {
@@ -121,6 +150,10 @@ const api = {
   saveMealRate: (payload, pin) => api.request('/api/config/meal-rates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), adminPinOverride: pin, roleOverride: 'ADMIN' }),
   updateCustomer: (id, payload, pin) => api.request(`/api/customers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), adminPinOverride: pin, roleOverride: 'ADMIN' }),
   adminStatus: () => api.request('/api/auth/status'),
+  systemVersion: () => api.request('/api/system/version'),
+  checkUpdate: () => api.request('/api/system/update/check'),
+  runUpdate: (pin) => api.request('/api/system/update/run', { method: 'POST', adminPinOverride: pin, roleOverride: 'ADMIN' }),
+  ensureMongo: (pin) => api.request('/api/system/mongo/ensure', { method: 'POST', adminPinOverride: pin, roleOverride: 'ADMIN' }),
   availability: (from, to) => api.request(`/api/bookings/availability?from=${from}&to=${to}`),
   roomBookings: (roomId, from, to) => api.request(`/api/bookings/room-bookings?roomId=${roomId}&from=${from}&to=${to}`),
   quote: (payload) => api.request('/api/bookings/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
@@ -150,10 +183,132 @@ function hideFeedback() {
   el.feedbackModal.classList.add('hidden');
 }
 
-async function requireAdminPinForAction() {
-  const pin = window.prompt('Enter Admin PIN to continue this action:');
-  if (!pin) throw new Error('Admin PIN required');
-  return pin.trim();
+function requireAdminPinForAction() {
+  return new Promise((resolve, reject) => {
+    // Reset modal state
+    el.pinModalInput.value = '';
+    el.pinModalError.style.display = 'none';
+    el.pinModalError.textContent = '';
+
+    // Show modal
+    el.pinModal.classList.remove('hidden');
+    el.pinModalInput.focus();
+
+    // Handle confirmation
+    const handleConfirm = () => {
+      const pin = el.pinModalInput.value.trim();
+      if (!pin) {
+        el.pinModalError.textContent = 'PIN cannot be empty';
+        el.pinModalError.style.display = 'block';
+        return;
+      }
+      cleanup();
+      resolve(pin);
+    };
+
+    // Handle cancellation
+    const handleCancel = () => {
+      cleanup();
+      reject(new Error('Admin PIN entry cancelled'));
+    };
+
+    // Cleanup function
+    const cleanup = () => {
+      el.pinModal.classList.add('hidden');
+      el.pinModalInput.value = '';
+      el.pinModalConfirm.removeEventListener('click', handleConfirm);
+      el.pinModalCancel.removeEventListener('click', handleCancel);
+      el.pinModalInput.removeEventListener('keypress', handleEnterKey);
+      el.pinModal.removeEventListener('click', handleOutsideClick);
+    };
+
+    // Handle Enter key
+    const handleEnterKey = (e) => {
+      if (e.key === 'Enter') handleConfirm();
+    };
+
+    // Handle outside click
+    const handleOutsideClick = (e) => {
+      if (e.target === el.pinModal) handleCancel();
+    };
+
+    // Attach event listeners
+    el.pinModalConfirm.addEventListener('click', handleConfirm);
+    el.pinModalCancel.addEventListener('click', handleCancel);
+    el.pinModalInput.addEventListener('keypress', handleEnterKey);
+    el.pinModal.addEventListener('click', handleOutsideClick);
+  });
+}
+
+function showCheckinModal(booking, customer) {
+  return new Promise((resolve, reject) => {
+    // Populate read-only booking info
+    el.checkinUnit.textContent = unitTitle(booking?.roomId);
+    el.checkinDateTime.textContent = fmtIst(booking?.checkInDate);
+    el.checkinBookingId.textContent = displayBookingRef(booking?.bookingRef || booking?.bookingCode || booking?._id);
+
+    // Populate editable customer fields
+    el.checkinName.value = customer?.fullName || '';
+    el.checkinPhone.value = customer?.phone || '';
+    el.checkinIdType.value = customer?.idType || '-';
+    el.checkinIdNumber.value = customer?.idNumber || '';
+    el.checkinAddress.value = customer?.address || '';
+
+    // Reset error state
+    el.checkinModalError.style.display = 'none';
+    el.checkinModalError.textContent = '';
+
+    // Show modal
+    el.checkinModal.classList.remove('hidden');
+    el.checkinName.focus();
+
+    // Handle confirmation
+    const handleConfirm = async () => {
+      const name = el.checkinName.value.trim();
+      const phone = el.checkinPhone.value.trim();
+      const address = el.checkinAddress.value.trim();
+
+      if (!name || !phone) {
+        el.checkinModalError.textContent = 'Name and phone are required';
+        el.checkinModalError.style.display = 'block';
+        return;
+      }
+
+      cleanup();
+
+      // Return updated customer data
+      resolve({
+        customerId: customer?._id,
+        fullName: name,
+        phone: phone,
+        address: address
+      });
+    };
+
+    // Handle cancellation
+    const handleCancel = () => {
+      cleanup();
+      reject(new Error('Check-in cancelled'));
+    };
+
+    // Cleanup function
+    const cleanup = () => {
+      el.checkinModal.classList.add('hidden');
+      el.checkinModalConfirm.removeEventListener('click', handleConfirm);
+      el.checkinModalCancel.removeEventListener('click', handleCancel);
+      el.checkinModal.removeEventListener('click', handleOutsideClick);
+    };
+
+    // Handle outside click
+    const handleOutsideClick = (e) => {
+      if (e.target === el.checkinModal) handleCancel();
+    };
+
+    // Attach event listeners
+    el.checkinModalConfirm.addEventListener('click', handleConfirm);
+    el.checkinModalCancel.addEventListener('click', handleCancel);
+    el.checkinModal.addEventListener('click', handleOutsideClick);
+  });
 }
 
 function displayBookingRef(ref) {
@@ -292,7 +447,14 @@ function selectedRoomsFromState() {
 }
 
 async function renderRoomBookings(roomId) {
-  if (!roomId || !el.fromDate.value || !el.toDate.value) return;
+  // Show helpful message if dates aren't selected
+  if (!el.fromDate.value || !el.toDate.value) {
+    el.roomBookingsList.innerHTML = '<div class="list-item" style="color: var(--muted); font-style: italic;">Please select check-in and check-out dates to view bookings for this room.</div>';
+    return;
+  }
+
+  if (!roomId) return;
+
   const rows = await api.roomBookings(roomId, el.fromDate.value, el.toDate.value);
   el.roomBookingsList.innerHTML = '';
 
@@ -322,7 +484,7 @@ function renderRooms() {
     tile.className = `room-tile ${room.available ? 'available' : 'booked'} ${room.needsCleaning ? 'needs-cleaning' : ''} ${state.selectedRoomIds.includes(room.roomId) ? 'selected' : ''}`;
     tile.innerHTML = `<h4>${unitTitle(room)}</h4>
       <p>${room.size.replace('_', ' ')} ${room.floor > 0 ? `· Floor ${room.floor}` : ''}</p>
-      <p>Default: Rs ${defaultRent(room)}/night</p>
+      <p style="font-weight: 600; color: var(--brand);">Rs ${defaultRent(room)}/night</p>
       <p>${room.available ? 'Available' : `Booked (${room.occupancyCount})`}</p>`;
 
     tile.addEventListener('click', async () => {
@@ -359,10 +521,14 @@ function renderOperationsRoomTiles() {
   rooms.forEach((room) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `room-tile ${room.available ? 'available' : 'booked'} ${room.needsCleaning ? 'needs-cleaning' : ''} ${el.moveRoomId.value === room.roomId ? 'selected' : ''}`;
-    btn.innerHTML = `<h4>${unitTitle(room)}</h4><p>${room.available ? 'Available' : 'Booked'}</p>`;
+    btn.className = `room-tile ${room.available ? 'available' : 'booked'} ${room.needsCleaning ? 'needs-cleaning' : ''} ${el.selectedRoomIdForView.value === room.roomId ? 'selected' : ''}`;
+
+    const statusText = room.available ? 'Available' : `${room.occupancyCount || 0} Booking${room.occupancyCount !== 1 ? 's' : ''}`;
+    const cleaningBadge = room.needsCleaning ? '<span class="badge warn" style="font-size: 0.7rem; margin-top: 4px;">Needs Cleaning</span>' : '';
+
+    btn.innerHTML = `<h4>${unitTitle(room)}</h4><p>${statusText}</p>${cleaningBadge}`;
     btn.addEventListener('click', async () => {
-      el.moveRoomId.value = room.roomId;
+      el.selectedRoomIdForView.value = room.roomId;
       renderOperationsRoomTiles();
       await loadOperationsBookings();
     });
@@ -371,13 +537,26 @@ function renderOperationsRoomTiles() {
 }
 
 async function loadOperationsBookings() {
-  if (!el.opFromDate?.value || !el.opToDate?.value || !el.moveRoomId?.value) return;
-  const rows = await api.roomBookings(el.moveRoomId.value, el.opFromDate.value, el.opToDate.value);
-  el.opBookingList.innerHTML = '';
-  if (!rows.length) {
-    el.opBookingList.innerHTML = '<div class=\"list-item\">No bookings found for selection.</div>';
+  // Show helpful message if dates aren't selected
+  if (!el.opFromDate?.value || !el.opToDate?.value) {
+    el.opBookingList.innerHTML = '<div class="list-item" style="color: var(--muted); font-style: italic;">Please select From Date and To Date above to view bookings.</div>';
     return;
   }
+
+  // Show helpful message if no room is selected
+  if (!el.selectedRoomIdForView?.value) {
+    el.opBookingList.innerHTML = '<div class="list-item" style="color: var(--muted); font-style: italic;">Click on a room tile above to view its bookings.</div>';
+    return;
+  }
+
+  const rows = await api.roomBookings(el.selectedRoomIdForView.value, el.opFromDate.value, el.opToDate.value);
+  el.opBookingList.innerHTML = '';
+
+  if (!rows.length) {
+    el.opBookingList.innerHTML = '<div class="list-item">No bookings found for this room in the selected date range.</div>';
+    return;
+  }
+
   rows.forEach((r) => {
     const div = document.createElement('div');
     div.className = 'booking-card';
@@ -456,7 +635,7 @@ async function searchAvailability() {
 
 async function refreshAdminStatus() {
   state.adminUnlocked = false;
-  el.adminState.textContent = 'PIN Required Per Admin Action';
+  el.adminState.textContent = 'Admin PIN Required';
   el.adminState.className = 'badge warn';
   el.adminConfigPanel.style.opacity = '1';
   el.ledgerPanel.style.opacity = '1';
@@ -472,10 +651,56 @@ function fillDefaultsForm() {
   el.defGst.value = state.defaults.gstPercent;
 }
 
+function populateRoomDropdown() {
+  const rooms = visibleRooms();
+  el.moveRoomId.innerHTML = '<option value="">Select Unit</option>';
+
+  rooms.forEach((room) => {
+    const option = document.createElement('option');
+    option.value = room.roomId;
+    option.textContent = unitTitle(room);
+    el.moveRoomId.appendChild(option);
+  });
+}
+
 function fillSelectedBooking(bookingId) {
   state.selectedBookingId = bookingId;
   el.manageBookingId.value = bookingId;
   el.billingBookingId.value = bookingId;
+
+  // Get the booking from state
+  const booking = state.bookingsById[bookingId];
+  if (!booking) {
+    el.selectedBookingPanel.classList.add('hidden');
+    return;
+  }
+
+  // Show and populate the booking detail panel
+  el.selectedBookingPanel.classList.remove('hidden');
+  el.selectedBookingRef.textContent = displayBookingRef(booking.bookingRef || booking.bookingCode || booking._id);
+  el.selectedCustomerName.textContent = booking.customerId?.fullName || '-';
+  el.selectedCurrentUnit.textContent = unitTitle(booking.roomId);
+  el.selectedCheckIn.textContent = fmtIst(booking.checkInDate);
+  el.selectedCheckOut.textContent = fmtIst(booking.checkOutDate);
+  el.selectedStatus.textContent = booking.status || '-';
+
+  const totalPaid = booking.totalPaid || 0;
+  const totalDue = booking.pricingSnapshot?.estimatedTotal || 0;
+  el.selectedPaymentInfo.textContent = `Rs ${totalPaid} / Rs ${totalDue} (${booking.paymentStatus || 'UNPAID'})`;
+
+  // Populate move/reschedule fields
+  el.moveRoomId.value = booking.roomId?._id || '';
+  el.moveRent.value = booking.pricingSnapshot?.nightlyBase || 0;
+  el.moveCheckIn.value = new Date(booking.checkInDate).toISOString().slice(0, 10);
+  el.moveCheckOut.value = new Date(booking.checkOutDate).toISOString().slice(0, 10);
+
+  // Populate customer edit fields
+  el.editCustomerId.value = booking.customerId?._id || '';
+  el.editCustomerName.value = booking.customerId?.fullName || '';
+  el.editCustomerPhone.value = booking.customerId?.phone || '';
+
+  // Populate room dropdown with all active rooms
+  populateRoomDropdown();
 }
 
 async function loadBookings() {
@@ -621,7 +846,7 @@ function applyCustomerDetailsToForm(data) {
 document.getElementById('seedRoomsBtn').addEventListener('click', async () => {
   try {
     await api.seedRooms();
-    setStatus(el.bookingStatus, 'Inventory seeded.', 'success');
+    setStatus(el.bookingStatus, 'Inventory initialized successfully.', 'success');
     await searchAvailability();
   } catch (err) {
     setStatus(el.bookingStatus, err.message, 'error');
@@ -632,6 +857,28 @@ document.getElementById('searchBtn').addEventListener('click', async () => {
   await searchAvailability().catch((e) => setStatus(el.bookingStatus, e.message, 'error'));
 });
 
+el.checkUpdateBtn?.addEventListener('click', async () => {
+  try {
+    const data = await api.checkUpdate();
+    const msg = data.updateAvailable
+      ? `Update available. Local ${String(data.localHash).slice(0, 7)} -> Remote ${String(data.remoteHash).slice(0, 7)}`
+      : `No update available. Local is current (${String(data.localHash).slice(0, 7)}).`;
+    showFeedback('Update Check', msg);
+  } catch (err) {
+    showFeedback('Update Check Failed', err.message);
+  }
+});
+
+el.runUpdateBtn?.addEventListener('click', async () => {
+  try {
+    const pin = await requireAdminPinForAction();
+    const result = await api.runUpdate(pin);
+    showFeedback('Update Started', result.message || 'Update started.');
+  } catch (err) {
+    showFeedback('Update Failed', err.message);
+  }
+});
+
 el.copyCustomerBtn.addEventListener('click', async () => {
   const payload = collectCustomerDetailsFromForm();
   state.customerClipboard = payload;
@@ -640,7 +887,7 @@ el.copyCustomerBtn.addEventListener('click', async () => {
   } catch (_e) {
     // ignore clipboard permission issues and rely on in-memory copy
   }
-  setStatus(el.bookingStatus, 'Customer details copied.', 'success');
+  setStatus(el.bookingStatus, 'Customer information copied.', 'success');
 });
 
 el.pasteCustomerBtn.addEventListener('click', async () => {
@@ -655,12 +902,12 @@ el.pasteCustomerBtn.addEventListener('click', async () => {
   }
 
   if (!payload) {
-    setStatus(el.bookingStatus, 'No copied customer details available.', 'error');
+    setStatus(el.bookingStatus, 'No customer information available to paste.', 'error');
     return;
   }
 
   applyCustomerDetailsToForm(payload);
-  setStatus(el.bookingStatus, 'Customer details pasted.', 'success');
+  setStatus(el.bookingStatus, 'Customer information pasted.', 'success');
 });
 
 el.roleSelect.addEventListener('change', refreshAdminStatus);
@@ -683,7 +930,18 @@ el.fromDate.addEventListener('change', () => {
   refreshQuote();
 });
 el.toDate.addEventListener('change', () => {
+  // If toDate is before or equal to fromDate, adjust fromDate to be 1 day before toDate
+  if (el.fromDate.value && el.toDate.value <= el.fromDate.value) {
+    const d = new Date(`${el.toDate.value}T00:00:00+05:30`);
+    d.setDate(d.getDate() - 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    el.fromDate.value = `${y}-${m}-${day}`;
+    el.opFromDate.value = el.fromDate.value;
+  }
   el.opToDate.value = el.toDate.value;
+  if (el.opFromDate.value > el.opToDate.value) el.opFromDate.value = el.fromDate.value;
   renderMealPlanner();
   refreshQuote();
 });
@@ -780,7 +1038,7 @@ document.getElementById('moveBookingBtn').addEventListener('click', async () => 
       mealSchedule: mealScheduleFromPlanner(),
       mealPlan: mealPlanFromForm()
     });
-    setStatus(el.manageStatus, 'Booking moved successfully.', 'success');
+    setStatus(el.manageStatus, 'Booking rescheduled successfully.', 'success');
     await searchAvailability();
     await loadBookings();
   } catch (err) {
@@ -814,24 +1072,37 @@ async function updateBookingAction(action) {
     if (action === 'CHECK_IN') {
       const booking = state.bookingsById[bookingId];
       const customer = booking?.customerId || {};
-      const details = [
-        `Name: ${customer.fullName || '-'}`,
-        `Phone: ${customer.phone || '-'}`,
-        `ID: ${customer.idType || '-'} ${customer.idNumber || ''}`,
-        `Address: ${customer.address || '-'}`,
-        `Unit: ${unitTitle(booking?.roomId)}`,
-        `Check-in: ${fmtIst(booking?.checkInDate)}`
-      ].join('\n');
-      const confirmed = window.confirm(`Confirm customer details before check-in:\n\n${details}`);
-      if (!confirmed) return;
+
+      // Show modal and wait for confirmation
+      const updatedCustomer = await showCheckinModal(booking, customer);
+
+      // If customer details were edited, update them first
+      if (updatedCustomer.fullName !== customer.fullName ||
+          updatedCustomer.phone !== customer.phone ||
+          updatedCustomer.address !== customer.address) {
+        try {
+          const pin = await requireAdminPinForAction();
+          await api.updateCustomer(updatedCustomer.customerId, {
+            fullName: updatedCustomer.fullName,
+            phone: updatedCustomer.phone,
+            address: updatedCustomer.address
+          }, pin);
+          setStatus(el.manageStatus, 'Customer information updated.', 'success');
+        } catch (updateErr) {
+          setStatus(el.manageStatus, `Customer update failed: ${updateErr.message}`, 'error');
+          return; // Don't proceed with check-in if customer update fails
+        }
+      }
     }
 
     await api.changeStatus(bookingId, action);
-    setStatus(el.manageStatus, `Booking marked: ${action}`, 'success');
+    setStatus(el.manageStatus, `Status updated: ${action.replace('_', ' ')}`, 'success');
     await loadBookings();
     await searchAvailability();
   } catch (err) {
-    setStatus(el.manageStatus, err.message, 'error');
+    if (err.message !== 'Check-in cancelled') {
+      setStatus(el.manageStatus, err.message, 'error');
+    }
   }
 }
 
@@ -876,7 +1147,7 @@ document.getElementById('saveCustomerBtn').addEventListener('click', async () =>
       fullName: el.editCustomerName.value.trim(),
       phone: el.editCustomerPhone.value.trim()
     }, pin);
-    setStatus(el.customerEditStatus, 'Customer updated successfully.', 'success');
+    setStatus(el.customerEditStatus, 'Customer information updated successfully.', 'success');
     await loadBookings();
   } catch (err) {
     setStatus(el.customerEditStatus, err.message, 'error');
@@ -1019,6 +1290,11 @@ async function bootstrap() {
   wireToggles();
   wireTabs();
 
+  const ver = await api.systemVersion().catch(() => null);
+  if (ver && el.versionInfo) {
+    el.versionInfo.textContent = `v${ver.version} · ${String(ver.localHash || '').slice(0, 7)}`;
+  }
+
   state.defaults = await api.getDefaults().catch(() => state.defaults);
   fillDefaultsForm();
 
@@ -1028,7 +1304,7 @@ async function bootstrap() {
   await loadOperationsBookings().catch(() => {});
   await loadBackupFiles().catch(() => {});
 
-  setStatus(el.bookingStatus, `Defaults loaded. GST inclusive at ${state.defaults.gstPercent}% by default.`);
+  setStatus(el.bookingStatus, `System initialized. GST rate: ${state.defaults.gstPercent}% (inclusive).`);
 }
 
 bootstrap();

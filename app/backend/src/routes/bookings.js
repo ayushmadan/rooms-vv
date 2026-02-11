@@ -20,7 +20,9 @@ function calculatePaymentStatus(totalPaid, totalDue, advancePaid) {
 }
 
 async function hasRoomConflict(roomId, start, end, ignoreBookingId = null) {
-  const bookings = await Booking.find({ roomId, status: { $nin: ['CANCELLED'] } }).lean();
+  // Only BOOKED and CHECKED_IN bookings block availability
+  const blockingStatuses = ['BOOKED', 'CHECKED_IN'];
+  const bookings = await Booking.find({ roomId, status: { $in: blockingStatuses } }).lean();
   return bookings.some((b) => {
     if (ignoreBookingId && String(b._id) === String(ignoreBookingId)) return false;
     return overlaps(start, end, new Date(b.checkInDate), new Date(b.checkOutDate));
@@ -47,7 +49,7 @@ router.get('/availability', async (req, res, next) => {
 
     const [rooms, bookings] = await Promise.all([
       Room.find({ active: true }).lean(),
-      Booking.find({ status: { $nin: ['CANCELLED'] } }).lean()
+      Booking.find({ status: { $in: ['BOOKED', 'CHECKED_IN'] } }).lean()
     ]);
 
     const data = rooms.map((room) => {

@@ -14,6 +14,8 @@ module.exports = {
   defaultDiningHallRent: Number(process.env.DEFAULT_DINING_HALL_RENT || 20000),
   mealAddonPerDay: Number(process.env.MEAL_ADDON_PER_DAY || 250),
   defaultGstPercent: Number(process.env.DEFAULT_GST_PERCENT || 10),
+  repoUrl: process.env.REPO_URL || 'https://github.com/ayushmadan/rooms-vv.git',
+  repoBranch: process.env.REPO_BRANCH || 'master',
   googleDriveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
   googleServiceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '',
   adminPin: process.env.ADMIN_PIN || '1234'

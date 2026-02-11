@@ -2,6 +2,38 @@
 
 Desktop-ready room allocation system with Windows MSI packaging, local MongoDB, modern tile UI, structured billing PDFs, and scheduled/manual backups.
 
+## 🚀 Quick Install (Windows)
+
+**[📥 Download Latest Version (MSI Installer)](https://github.com/ayushmadan/rooms-vv/releases/latest)**
+
+### Installation Steps
+
+1. Download the `.msi` file from the link above
+2. Run the installer (requires administrator privileges)
+3. The installer will automatically:
+   - ✅ Install MongoDB if not already present
+   - ✅ Configure MongoDB to start on system startup
+   - ✅ Set up the application to launch at startup
+   - ✅ Create desktop and start menu shortcuts
+   - ✅ Initialize with default configuration
+
+### System Requirements
+
+- Windows 10/11 (64-bit)
+- 4GB RAM minimum
+- 500MB free disk space
+- Internet connection for updates and Google Drive sync
+
+### First Launch
+
+After installation, launch the application from the Start Menu or Desktop shortcut. On first run:
+1. The application will verify MongoDB is running
+2. Default admin PIN is `1234` (change this in Settings)
+3. Click "Initialize Inventory" to set up the default room layout
+4. You're ready to start managing bookings!
+
+---
+
 ## Inventory layout
 
 - First floor: `Room 101, 102` (BIG), `Room 103, 104` (SMALL)
@@ -58,3 +90,51 @@ npm run build:msi
 ```
 
 MSI output is generated in `dist/`.
+
+## Auto-Update System
+
+The application includes built-in update checking and installation:
+
+### In-App Updates
+
+1. **Check for Updates**: Click "Check Update" in the header
+   - Compares local version with latest GitHub release
+   - Shows available version if update exists
+
+2. **Install Updates**: Click "Update & Restart"
+   - Automatically downloads and installs latest version
+   - Restarts the application after update completes
+
+### Creating New Releases
+
+For developers creating new releases:
+
+1. **Update Version**: Edit `package.json` version (e.g., `0.2.0`)
+2. **Create Git Tag**:
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+3. **GitHub Actions**: Automatically builds MSI and creates release
+4. **Users Notified**: Installed apps will detect the new version
+
+### Manual Build (Development)
+
+```bash
+# Build MSI locally
+npm run build:msi
+
+# Build with auto-fetch from GitHub
+npm run build:msi:pipeline
+
+# Manual update (without MSI)
+npm run update:win
+
+# Ensure MongoDB is running
+npm run mongo:ensure:win
+```
+
+## Default Admin PIN
+
+- If `.env` is missing, default `ADMIN_PIN=1234`.
+- For production, set your own pin in `.env`.

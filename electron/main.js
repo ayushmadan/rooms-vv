@@ -4,10 +4,33 @@ const { spawn } = require('child_process');
 
 let mainWindow;
 let backendProcess;
+let isQuitting = false;
+
+// Prevent multiple instances
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  console.log('Another instance is already running. Exiting.');
+  app.quit();
+}
+
+// Focus existing window if second instance tries to start
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 function startBackend() {
   backendProcess = spawn(process.execPath, [path.join(__dirname, '..', 'app/backend/src/index.js')], {
     stdio: 'inherit'
+  });
+
+  backendProcess.on('exit', () => {
+    if (!isQuitting) {
+      setTimeout(startBackend, 1000);
+    }
   });
 }
 
@@ -30,6 +53,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  isQuitting = true;
   if (backendProcess && !backendProcess.killed) {
     backendProcess.kill();
   }

@@ -19,7 +19,9 @@
           </div>
         </div>
         <div class="top-actions">
-          <button id="seedRoomsBtn" class="btn btn-outline">Seed Inventory</button>
+          <button id="seedRoomsBtn" class="btn btn-outline">Initialize Inventory</button>
+          <button id="checkUpdateBtn" class="btn btn-outline">Check Update</button>
+          <button id="runUpdateBtn" class="btn btn-outline">Update & Restart</button>
           <label>Role
             <select id="roleSelect">
               <option value="STAFF">Staff</option>
@@ -29,7 +31,8 @@
           <label>Admin PIN
             <input id="adminPin" type="password" placeholder="PIN" />
           </label>
-          <span id="adminState" class="badge warn">Admin Locked</span>
+          <span id="adminState" class="badge warn">Admin Mode Inactive</span>
+          <span id="versionInfo" class="badge ok">Version -</span>
         </div>
       </header>
 
@@ -135,27 +138,69 @@
               <label>To Date <input id="opToDate" type="date" /></label>
             </div>
             <div id="opRoomsGrid" class="rooms-grid compact"></div>
+
+            <input type="hidden" id="selectedRoomIdForView" />
+
             <h3>Bookings In Selected Range/Room</h3>
             <div id="opBookingList" class="booking-card-list"></div>
-            <label>Selected Booking ID <input id="manageBookingId" placeholder="Select from list/table" readonly /></label>
-            <div class="row row-2">
-              <label>Move To Room/Hall ID <input id="moveRoomId" /></label>
-              <label>Move Rent / Night (Rs) <input id="moveRent" type="number" min="0" step="1" /></label>
-              <label>Move Check-in <input id="moveCheckIn" type="date" /></label>
-              <label>Move Check-out <input id="moveCheckOut" type="date" /></label>
-            </div>
-            <div class="stack">
+
+            <input type="hidden" id="manageBookingId" />
+
+            <div id="selectedBookingPanel" class="selected-booking-panel hidden">
+              <h3>Selected Booking</h3>
+              <div class="booking-detail-card">
+                <div class="detail-row">
+                  <span class="detail-label">Booking ID:</span>
+                  <strong id="selectedBookingRef">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Customer:</span>
+                  <strong id="selectedCustomerName">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Current Unit:</span>
+                  <strong id="selectedCurrentUnit">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Check-in:</span>
+                  <strong id="selectedCheckIn">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Check-out:</span>
+                  <strong id="selectedCheckOut">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Status:</span>
+                  <strong id="selectedStatus">-</strong>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Payment:</span>
+                  <strong id="selectedPaymentInfo">-</strong>
+                </div>
+              </div>
+
+              <h4 style="margin-top: 16px;">Quick Actions</h4>
+              <div class="stack">
+                <button id="checkInBtn" class="btn">Record Check-in</button>
+                <button id="checkOutBtn" class="btn">Record Check-out</button>
+                <button id="cleanedBtn" class="btn">Record Cleaned</button>
+                <button id="cancelBookingBtn" class="btn btn-outline danger">Cancel Booking</button>
+              </div>
+
+              <h4 style="margin-top: 16px;">Reschedule / Move Booking</h4>
+              <div class="row row-2">
+                <label>Move To Unit
+                  <select id="moveRoomId">
+                    <option value="">Select Unit</option>
+                  </select>
+                </label>
+                <label>Nightly Rate (Rs) <input id="moveRent" type="number" min="0" step="1" /></label>
+                <label>New Check-in <input id="moveCheckIn" type="date" /></label>
+                <label>New Check-out <input id="moveCheckOut" type="date" /></label>
+              </div>
               <button id="moveBookingBtn" class="btn">Move Booking</button>
-              <button id="cancelBookingBtn" class="btn btn-outline danger">Cancel Booking</button>
-            </div>
 
-            <div class="stack split-top">
-              <button id="checkInBtn" class="btn">Mark Check-in</button>
-              <button id="checkOutBtn" class="btn">Mark Check-out</button>
-              <button id="cleanedBtn" class="btn">Mark Cleaned</button>
-            </div>
-
-            <h3>Payments</h3>
+              <h4 style="margin-top: 16px;">Payments</h4>
             <div class="row row-2">
               <label>Amount (Rs) <input id="paymentAmount" type="number" min="0" step="1" value="0" /></label>
               <label>Mode
@@ -177,7 +222,7 @@
             </div>
             <div class="stack">
               <button id="addPaymentBtn" class="btn">Record Payment</button>
-              <button id="markBillPaidBtn" class="btn btn-outline">Mark Bill Paid</button>
+              <button id="markBillPaidBtn" class="btn btn-outline">Record Full Payment</button>
             </div>
             <p id="manageStatus" class="status"></p>
           </section>
@@ -238,14 +283,14 @@
           <section class="card panel" id="adminConfigPanel">
             <h2>Admin Pricing & GST</h2>
             <div class="row row-2">
-              <label>Default Small <input id="defSmall" type="number" min="0" /></label>
-              <label>Default Big <input id="defBig" type="number" min="0" /></label>
-              <label>Default Party Hall <input id="defParty" type="number" min="0" /></label>
-              <label>Default Dining Hall <input id="defDining" type="number" min="0" /></label>
-              <label>Default Meal Addon/day <input id="defMeal" type="number" min="0" /></label>
+              <label>Small Room Rate (Rs/night) <input id="defSmall" type="number" min="0" /></label>
+              <label>Large Room Rate (Rs/night) <input id="defBig" type="number" min="0" /></label>
+              <label>Party Hall Rate (Rs/night) <input id="defParty" type="number" min="0" /></label>
+              <label>Dining Hall Rate (Rs/night) <input id="defDining" type="number" min="0" /></label>
+              <label>Meal Addon Rate (Rs/day) <input id="defMeal" type="number" min="0" /></label>
               <label>GST % (inclusive) <input id="defGst" type="number" min="0" step="0.01" /></label>
             </div>
-            <button id="saveDefaultsBtn" class="btn">Save Default Config</button>
+            <button id="saveDefaultsBtn" class="btn">Save Pricing Configuration</button>
 
             <h3>Specific Date Overrides</h3>
             <div class="row row-2">
@@ -259,7 +304,7 @@
           </section>
 
           <section class="card panel" id="customerEditPanel">
-            <h2>Admin Past Customer Edit</h2>
+            <h2>Customer Information Management</h2>
             <label>Customer ID <input id="editCustomerId" /></label>
             <label>Full Name <input id="editCustomerName" /></label>
             <label>Phone <input id="editCustomerPhone" /></label>
@@ -303,6 +348,53 @@
         <h3 id="feedbackTitle">Status</h3>
         <p id="feedbackMessage"></p>
         <button id="feedbackCloseBtn" class="btn" type="button">Close</button>
+      </div>
+    </div>
+
+    <div id="pinModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <h3 id="pinModalTitle">Admin Authentication Required</h3>
+        <p id="pinModalMessage">Enter Admin PIN to continue this action:</p>
+        <label style="margin-top: 12px;">
+          Admin PIN
+          <input id="pinModalInput" type="password" placeholder="Enter PIN" />
+        </label>
+        <p id="pinModalError" class="status" style="color: #a4372f; display: none;"></p>
+        <div class="stack-inline" style="margin-top: 12px;">
+          <button id="pinModalCancel" class="btn btn-outline" type="button">Cancel</button>
+          <button id="pinModalConfirm" class="btn" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="checkinModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card" style="width: min(540px, 92vw);">
+        <h3>Confirm Check-in</h3>
+        <p class="muted" style="margin-bottom: 12px;">Review and edit customer information before check-in:</p>
+
+        <div style="background: #f8fbfd; border: 1px solid #d5e3ec; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+          <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px; font-size: 0.85rem;">
+            <span style="color: var(--muted);">Unit:</span>
+            <strong id="checkinUnit">-</strong>
+            <span style="color: var(--muted);">Check-in:</span>
+            <strong id="checkinDateTime">-</strong>
+            <span style="color: var(--muted);">Booking ID:</span>
+            <strong id="checkinBookingId">-</strong>
+          </div>
+        </div>
+
+        <label>Full Name <input id="checkinName" /></label>
+        <label>Phone <input id="checkinPhone" /></label>
+        <label>ID Type <input id="checkinIdType" readonly /></label>
+        <label>ID Number <input id="checkinIdNumber" readonly /></label>
+        <label>Address <input id="checkinAddress" /></label>
+
+        <p id="checkinModalError" class="status" style="color: #a4372f; display: none; margin-top: 8px;"></p>
+
+        <div class="stack-inline" style="margin-top: 12px;">
+          <button id="checkinModalCancel" class="btn btn-outline" type="button">Cancel</button>
+          <button id="checkinModalConfirm" class="btn" type="button">Confirm Check-in</button>
+        </div>
       </div>
     </div>
 

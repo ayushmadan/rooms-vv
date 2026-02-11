@@ -1,0 +1,142 @@
+name: Build and Release MSI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            $version = "${{ github.event.inputs.version }}"
+          } elseif ("${{ github.ref }}" -match "refs/tags/v(.+)") {
+            $version = $matches[1]
+          } else {
+            $pkg = Get-Content package.json | ConvertFrom-Json
+            $version = $pkg.version
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Building version: $version"
+
+      - name: Update package.json version
+        shell: pwsh
+        run: |
+          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build MSI
+        run: npm run build:msi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get MSI filename
+        id: msi
+        shell: pwsh
+        run: |
+          $msiFile = Get-ChildItem -Path dist\*.msi | Select-Object -First 1
+          if ($msiFile) {
+            echo "MSI_PATH=$($msiFile.FullName)" >> $env:GITHUB_OUTPUT
+            echo "MSI_NAME=$($msiFile.Name)" >> $env:GITHUB_OUTPUT
+            echo "Found MSI: $($msiFile.Name)"
+          } else {
+            echo "Error: No MSI file found in dist/"
+            exit 1
+          }
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          release_name: Vira Villas Rooms v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Vira Villas Rooms v${{ steps.version.outputs.VERSION }}
+
+            ### Download and Install
+
+            1. Download the MSI installer below
+            2. Run the installer (requires administrator privileges)
+            3. The application will:
+               - Install MongoDB automatically if not present
+               - Configure MongoDB to start on system startup
+               - Set up the application to launch at startup
+               - Create desktop and start menu shortcuts
+
+            ### Features
+
+            - Offline-first room allocation and booking system
+            - Customer management with ID verification
+            - Multi-room booking support
+            - Payment tracking (UPI, Cash, Credit/Debit cards)
+            - Bill and declaration PDF generation
+            - Automatic scheduled backups
+            - Google Drive integration for backups
+            - In-app update checking
+
+            ### System Requirements
+
+            - Windows 10/11 (64-bit)
+            - 4GB RAM minimum
+            - 500MB free disk space
+            - Internet connection for updates and Google Drive sync
+
+            ### Auto-Update
+
+            The application includes built-in update checking. Click "Check Update" in the app to check for new versions, then "Update & Restart" to install updates automatically.
+
+            ---
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.VERSION }}...HEAD
+          draft: false
+          prerelease: false
+
+      - name: Upload MSI to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.msi.outputs.MSI_PATH }}
+          asset_name: ${{ steps.msi.outputs.MSI_NAME }}
+          asset_content_type: application/x-msi
+
+      - name: Update latest release tag
+        shell: pwsh
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -f latest
+          git push -f origin latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

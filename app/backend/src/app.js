@@ -13,6 +13,7 @@ const configRoutes = require('./routes/config');
 const backupRoutes = require('./routes/backups');
 const authRoutes = require('./routes/auth');
 const ledgerRoutes = require('./routes/ledger');
+const systemRoutes = require('./routes/system');
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/ledger', ledgerRoutes);
+app.use('/api/system', systemRoutes);
 
 app.use('/', express.static(path.resolve('app/frontend')));
 
