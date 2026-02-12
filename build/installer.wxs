@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+  <!-- Custom WiX configuration for Vira Villas Rooms -->
+  <!-- This bundles MongoDB and other prerequisites within the MSI -->
+
+  <Fragment>
+    <!--
+      Custom Actions to install prerequisites during MSI installation
+      Similar to how games bundle DirectX installers
+    -->
+
+    <!-- Binary definitions for bundled installers -->
+    <Binary Id="MongoDBInstaller" SourceFile="installers\mongodb-installer.msi" />
+    <Binary Id="SetupScript" SourceFile="installers\setup-mongodb.ps1" />
+
+    <!-- Custom Action: Install MongoDB -->
+    <CustomAction Id="InstallMongoDB"
+                  BinaryKey="MongoDBInstaller"
+                  Execute="deferred"
+                  Impersonate="no"
+                  ExeCommand="msiexec.exe /i &quot;[INSTALLFOLDER]installers\mongodb-installer.msi&quot; /qn ADDLOCAL=ServerService,Client SHOULD_INSTALL_COMPASS=0"
+                  Return="ignore" />
+
+    <!-- Custom Action: Configure MongoDB Service -->
+    <CustomAction Id="ConfigureMongoService"
+                  Directory="INSTALLFOLDER"
+                  Execute="deferred"
+                  Impersonate="no"
+                  ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -Command &quot;&amp; { Start-Service -Name MongoDB -ErrorAction SilentlyContinue; Get-Service -Name MongoDB,MongoDBServer -ErrorAction SilentlyContinue | ForEach-Object { Set-Service $_.Name -StartupType Automatic } }&quot;"
+                  Return="ignore" />
+
+    <!-- Custom Action: Create .env file -->
+    <CustomAction Id="CreateEnvFile"
+                  Directory="INSTALLFOLDER"
+                  Execute="deferred"
+                  Impersonate="no"
+                  ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -Command &quot;&amp; { if (-not (Test-Path '.env')) { Copy-Item '.env.example' '.env' -ErrorAction SilentlyContinue } }&quot;"
+                  Return="ignore" />
+
+    <!-- Custom Action: Set MongoDB to auto-restart on failure -->
+    <CustomAction Id="SetMongoRecovery"
+                  Directory="INSTALLFOLDER"
+                  Execute="deferred"
+                  Impersonate="no"
+                  ExeCommand="powershell.exe -NoProfile -ExecutionPolicy Bypass -Command &quot;&amp; { $svc = Get-Service -Name MongoDB,MongoDBServer -ErrorAction SilentlyContinue | Select-Object -First 1; if ($svc) { sc.exe failure $svc.Name reset= 86400 actions= restart/5000/restart/5000/restart/5000 } }&quot;"
+                  Return="ignore" />
+
+    <!-- Custom Action: Check if MongoDB is already installed -->
+    <Property Id="MONGOINSTALLED">
+      <RegistrySearch Id="MongoCheck"
+                      Root="HKLM"
+                      Key="SOFTWARE\MongoDB\Server"
+                      Type="directory" />
+    </Property>
+
+    <Property Id="MONGOSERVICE">
+      <ComponentSearch Id="MongoServiceSearch" Guid="*">
+        <ServiceSearch Name="MongoDB" />
+      </ComponentSearch>
+    </Property>
+
+    <!-- Installation sequence -->
+    <InstallExecuteSequence>
+      <!-- Install MongoDB only if not already installed -->
+      <Custom Action="InstallMongoDB" After="InstallFiles">
+        <![CDATA[NOT MONGOINSTALLED AND NOT REMOVE]]>
+      </Custom>
+
+      <!-- Configure MongoDB service -->
+      <Custom Action="ConfigureMongoService" After="InstallMongoDB">
+        <![CDATA[NOT REMOVE]]>
+      </Custom>
+
+      <!-- Set recovery options -->
+      <Custom Action="SetMongoRecovery" After="ConfigureMongoService">
+        <![CDATA[NOT REMOVE]]>
+      </Custom>
+
+      <!-- Create .env file -->
+      <Custom Action="CreateEnvFile" After="SetMongoRecovery">
+        <![CDATA[NOT REMOVE]]>
+      </Custom>
+    </InstallExecuteSequence>
+
+    <!-- UI sequence for interactive installs -->
+    <InstallUISequence>
+      <!-- Show progress during MongoDB installation -->
+    </InstallUISequence>
+
+  </Fragment>
+
+  <!-- Additional components -->
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <!-- Create installers directory to hold bundled installers -->
+      <Directory Id="InstallersDir" Name="installers">
+        <Component Id="MongoDBInstallerComponent" Guid="A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D">
+          <!-- MongoDB installer will be embedded -->
+          <File Id="MongoDBInstallerFile"
+                Source="installers\mongodb-installer.msi"
+                KeyPath="yes" />
+        </Component>
+        <Component Id="SetupScriptComponent" Guid="B2C3D4E5-F6A7-5B6C-9D0E-1F2A3B4C5D6E">
+          <!-- PowerShell setup script -->
+          <File Id="SetupScriptFile"
+                Source="installers\setup-mongodb.ps1"
+                KeyPath="yes" />
+        </Component>
+      </Directory>
+    </DirectoryRef>
+
+    <!-- Feature definition -->
+    <ComponentGroup Id="BundledInstallers">
+      <ComponentRef Id="MongoDBInstallerComponent" />
+      <ComponentRef Id="SetupScriptComponent" />
+    </ComponentGroup>
+  </Fragment>
+
+</Wix>

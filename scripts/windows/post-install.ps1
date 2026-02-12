@@ -97,7 +97,7 @@ if (-not (Test-Path $envPath)) {
     $envContent = @"
 PORT=4000
 MONGO_URI=$MongoUri
-ADMIN_PIN=1234
+ADMIN_PIN=5597
 REPO_URL=$RepoUrl
 REPO_BRANCH=$Branch
 "@

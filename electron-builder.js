@@ -12,7 +12,8 @@ module.exports = {
     "node_modules/**/*",
     "package.json",
     "package-lock.json",
-    ".env.example"
+    ".env.example",
+    "build/installers/**/*"  // Include bundled installers
   ],
   win: {
     target: [
@@ -30,11 +31,54 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     menuCategory: true,
-    // Custom WiX configuration to run post-install script
-    warningsAsErrors: false
+    warningsAsErrors: false,
+    // Custom WiX configuration to bundle and install prerequisites
+    perMachine: true,
+    upgradeCode: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D",
+    // Include custom WiX XML for bundled installers
+    extensions: ["WixUtilExtension"],
+    include: "build/installer.wxs"
   },
   mac: {
     target: ["dmg"]
+  },
+  // Before build hook to download prerequisites
+  beforeBuild: async (context) => {
+    const { spawn } = require('child_process');
+    const path = require('path');
+
+    if (context.platform.name === 'windows') {
+      console.log('Downloading prerequisites for bundled installer...');
+
+      const downloadScript = path.join(context.projectDir, 'scripts', 'windows', 'download-prerequisites.ps1');
+
+      return new Promise((resolve, reject) => {
+        const ps = spawn('powershell.exe', [
+          '-NoProfile',
+          '-ExecutionPolicy', 'Bypass',
+          '-File', downloadScript
+        ], {
+          stdio: 'inherit',
+          cwd: context.projectDir
+        });
+
+        ps.on('close', (code) => {
+          if (code === 0) {
+            console.log('✓ Prerequisites downloaded successfully');
+            resolve();
+          } else {
+            console.error('⚠ Failed to download prerequisites (continuing anyway)');
+            // Don't reject - allow build to continue even if download fails
+            resolve();
+          }
+        });
+
+        ps.on('error', (err) => {
+          console.error('⚠ Error running download script:', err);
+          resolve(); // Don't reject - allow build to continue
+        });
+      });
+    }
   },
   // After pack hook to prepare installation scripts
   afterPack: async (context) => {
@@ -100,7 +144,7 @@ TROUBLESHOOTING:
 - If the app doesn't start, check if MongoDB service is running
 - Check the .env file in the installation directory
 - Default MongoDB URI: mongodb://127.0.0.1:27017/roomsvv
-- Default Admin PIN: 1234
+- Default Admin PIN: 5597
 
 For support, visit: https://github.com/ayushmadan/rooms-vv
 `;
