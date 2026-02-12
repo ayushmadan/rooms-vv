@@ -78,5 +78,6 @@
 
 ; Custom header for installer
 !macro customHeader
-  !system "echo NSIS Custom Installer for Vira Villas Rooms"
+  ; Custom installer for Vira Villas Rooms
+  ; Bundles MongoDB and other prerequisites
 !macroend

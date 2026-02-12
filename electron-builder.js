@@ -12,8 +12,7 @@ module.exports = {
     "node_modules/**/*",
     "package.json",
     "package-lock.json",
-    ".env.example",
-    "build/installers/**/*"  // Include bundled installers
+    ".env.example"
   ],
   win: {
     target: [
@@ -51,13 +50,24 @@ module.exports = {
   beforeBuild: async (context) => {
     const { spawn } = require('child_process');
     const path = require('path');
+    const fs = require('fs');
 
     if (context.platform.name === 'windows') {
+      // Ensure build/installers directory exists
+      const installersDir = path.join(context.projectDir, 'build', 'installers');
+      fs.mkdirSync(installersDir, { recursive: true });
+
       console.log('Downloading prerequisites for bundled installer...');
 
       const downloadScript = path.join(context.projectDir, 'scripts', 'windows', 'download-prerequisites.ps1');
 
-      return new Promise((resolve, reject) => {
+      // Check if download script exists
+      if (!fs.existsSync(downloadScript)) {
+        console.log('⚠ Download script not found, skipping prerequisite download');
+        return Promise.resolve();
+      }
+
+      return new Promise((resolve) => {
         const ps = spawn('powershell.exe', [
           '-NoProfile',
           '-ExecutionPolicy', 'Bypass',
@@ -70,17 +80,15 @@ module.exports = {
         ps.on('close', (code) => {
           if (code === 0) {
             console.log('✓ Prerequisites downloaded successfully');
-            resolve();
           } else {
-            console.error('⚠ Failed to download prerequisites (continuing anyway)');
-            // Don't reject - allow build to continue even if download fails
-            resolve();
+            console.log('⚠ Failed to download prerequisites (continuing anyway)');
           }
+          resolve();
         });
 
         ps.on('error', (err) => {
-          console.error('⚠ Error running download script:', err);
-          resolve(); // Don't reject - allow build to continue
+          console.log('⚠ Error running download script:', err.message);
+          resolve();
         });
       });
     }
