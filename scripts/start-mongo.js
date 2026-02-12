@@ -1,5 +1,4 @@
 const { execSync } = require('child_process');
-const path = require('path');
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,21 +28,26 @@ async function ensureMongoRunning() {
 
       // Install MongoDB if not found
       if (!serviceName) {
-        console.log('[MongoDB] MongoDB not found. Installing...');
-        try {
-          const script = path.resolve('scripts/windows/ensure-mongo.ps1');
-          console.log('[MongoDB] Running installation script...');
-          execSync(`powershell -ExecutionPolicy Bypass -File \"${script}\" -InstallIfMissing`, { stdio: 'inherit' });
-          serviceName = 'MongoDB';
-          console.log('[MongoDB] Installation complete');
+        console.error('[MongoDB] ===================================');
+        console.error('[MongoDB] MongoDB is not installed!');
+        console.error('[MongoDB] ===================================');
+        console.error('[MongoDB]');
+        console.error('[MongoDB] Please install MongoDB manually from:');
+        console.error('[MongoDB] https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4-signed.msi');
+        console.error('[MongoDB]');
+        console.error('[MongoDB] Or visit: https://www.mongodb.com/try/download/community');
+        console.error('[MongoDB]');
+        console.error('[MongoDB] After installing MongoDB:');
+        console.error('[MongoDB] 1. Restart your computer');
+        console.error('[MongoDB] 2. Run this application again');
+        console.error('[MongoDB] ===================================');
 
-          // Wait longer after fresh install
-          console.log('[MongoDB] Waiting for MongoDB service to initialize...');
-          await wait(5000);
-        } catch (installErr) {
-          console.error('[MongoDB] Installation failed:', installErr.message);
-          throw new Error('MongoDB installation failed');
-        }
+        throw new Error(
+          'MongoDB is not installed.\n\n' +
+          'Download MongoDB from:\n' +
+          'https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4-signed.msi\n\n' +
+          'Then restart your computer and try again.'
+        );
       }
 
       // Configure service

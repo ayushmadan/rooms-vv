@@ -113,13 +113,24 @@ async function startBackend() {
 
       if (backendRestartCount >= MAX_BACKEND_RESTARTS) {
         console.error(`Backend failed to start after ${MAX_BACKEND_RESTARTS} attempts`);
+
+        // Close loading window if it's still open
+        if (loadingWindow && !loadingWindow.isDestroyed()) {
+          loadingWindow.close();
+        }
+
         dialog.showErrorBox(
           'Backend Startup Failed',
           `The backend server failed to start after ${MAX_BACKEND_RESTARTS} attempts.\n\n` +
           'This may be due to:\n' +
-          '- MongoDB not running\n' +
+          '- MongoDB not installed or not running\n' +
           '- Port 4000 being used by another application\n' +
           '- Missing dependencies\n\n' +
+          'To fix this:\n' +
+          '1. Download and install MongoDB from:\n' +
+          '   https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4-signed.msi\n' +
+          '2. Restart your computer\n' +
+          '3. Run this application as Administrator\n\n' +
           'The application will now exit.'
         );
         app.quit();
@@ -303,10 +314,11 @@ async function createWindow() {
       `The application failed to start after 3 minutes.\n\n` +
       `Error: ${errorDetails}\n\n` +
       `Common solutions:\n` +
-      `1. Restart your computer to clear port 4000\n` +
-      `2. Run the application as Administrator\n` +
-      `3. Check Windows Firewall settings\n` +
-      `4. Manually install MongoDB from mongodb.com\n\n` +
+      `1. Download and install MongoDB from:\n` +
+      `   https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4-signed.msi\n` +
+      `2. Restart your computer to clear port 4000\n` +
+      `3. Run the application as Administrator\n` +
+      `4. Check Windows Firewall settings\n\n` +
       `If this persists, please contact support.\n\n` +
       `The application will now close.`
     );
