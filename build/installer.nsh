@@ -1,24 +1,121 @@
 ; Custom NSIS script for Vira Villas Rooms
-; Interactive installer that downloads and installs MongoDB with real-time progress
-; Similar to game installers (Steam, Epic Games, etc.)
+; Interactive installer with MongoDB setup and backup/restore functionality
+; Similar to professional game installers (Steam, Epic Games, etc.)
 
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "nsDialogs.nsh"
 
-; Variables for custom page
+; Variables for custom pages
 Var Dialog
 Var StatusLabel
 Var ProgressBar
 Var ChecklistLabel
+Var RestoreCheckbox
+Var RestorePath
+Var RestorePathText
+Var BackupPath
+Var BackupCheckbox
+Var ShouldRestore
+Var ShouldBackup
 
 ; MongoDB configuration
 !define MONGO_VERSION "8.0.4"
 !define MONGO_DOWNLOAD_URL "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-${MONGO_VERSION}-signed.msi"
 !define MONGO_INSTALLER "$TEMP\mongodb-installer.msi"
+!define MONGO_URI "mongodb://127.0.0.1:27017/roomsvv"
 
 ; ============================================================================
-; Custom Setup Page - Shows real-time progress
+; Restore Page - Ask user if they want to restore from backup
+; ============================================================================
+Function RestoreBackupPage
+  nsDialogs::Create 1018
+  Pop $Dialog
+
+  ${If} $Dialog == error
+    Abort
+  ${EndIf}
+
+  ; Title
+  ${NSD_CreateLabel} 0 0 100% 20u "Database Restore"
+  Pop $0
+  CreateFont $1 "Segoe UI" 12 700
+  SendMessage $0 ${WM_SETFONT} $1 0
+
+  ; Description
+  ${NSD_CreateLabel} 0 25u 100% 20u "Do you want to restore from a previous backup?"
+  Pop $0
+
+  ; Checkbox
+  ${NSD_CreateCheckbox} 0 50u 100% 12u "Restore from backup"
+  Pop $RestoreCheckbox
+  ${NSD_OnClick} $RestoreCheckbox RestoreCheckboxClick
+
+  ; Path label
+  ${NSD_CreateLabel} 10u 70u 80u 12u "Backup directory:"
+  Pop $0
+
+  ; Path text box
+  ${NSD_CreateText} 90u 70u 150u 12u ""
+  Pop $RestorePathText
+  EnableWindow $RestorePathText 0
+
+  ; Browse button
+  ${NSD_CreateButton} 245u 69u 50u 14u "Browse..."
+  Pop $0
+  ${NSD_OnClick} $0 BrowseRestoreDir
+  EnableWindow $0 0
+  StrCpy $R9 $0  ; Store button handle
+
+  nsDialogs::Show
+FunctionEnd
+
+; Handle restore checkbox click
+Function RestoreCheckboxClick
+  Pop $0
+  ${NSD_GetState} $RestoreCheckbox $1
+  ${If} $1 == ${BST_CHECKED}
+    EnableWindow $RestorePathText 1
+    EnableWindow $R9 1  ; Enable browse button
+  ${Else}
+    EnableWindow $RestorePathText 0
+    EnableWindow $R9 0
+    ${NSD_SetText} $RestorePathText ""
+  ${EndIf}
+FunctionEnd
+
+; Browse for restore directory
+Function BrowseRestoreDir
+  nsDialogs::SelectFolderDialog "Select backup directory" ""
+  Pop $0
+  ${If} $0 != error
+    ${NSD_SetText} $RestorePathText $0
+    StrCpy $RestorePath $0
+  ${EndIf}
+FunctionEnd
+
+; Save restore page data
+Function RestoreBackupPageLeave
+  ${NSD_GetState} $RestoreCheckbox $0
+  ${If} $0 == ${BST_CHECKED}
+    ${NSD_GetText} $RestorePathText $RestorePath
+    ${If} $RestorePath == ""
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Please select a backup directory or uncheck the restore option."
+      Abort
+    ${EndIf}
+    ${If} ${FileExists} "$RestorePath\backup-manifest.json"
+      StrCpy $ShouldRestore "1"
+    ${Else}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Invalid backup directory. Could not find backup-manifest.json."
+      Abort
+    ${EndIf}
+  ${Else}
+    StrCpy $ShouldRestore "0"
+  ${EndIf}
+FunctionEnd
+
+; ============================================================================
+; Setup Prerequisites Page - Shows real-time progress
 ; ============================================================================
 Function SetupPrerequisitesPage
   nsDialogs::Create 1018
@@ -43,7 +140,7 @@ Function SetupPrerequisitesPage
   Pop $ProgressBar
 
   ; Checklist label
-  ${NSD_CreateLabel} 0 70u 100% 80u "Setup Steps:$\r$\n☐ Checking MongoDB installation$\r$\n☐ Downloading MongoDB (if needed)$\r$\n☐ Installing MongoDB$\r$\n☐ Configuring services$\r$\n☐ Setting up environment"
+  ${NSD_CreateLabel} 0 70u 100% 80u "Setup Steps:$\r$\n☐ Checking MongoDB installation$\r$\n☐ Downloading MongoDB (if needed)$\r$\n☐ Installing MongoDB$\r$\n☐ Configuring services$\r$\n☐ Setting up environment$\r$\n☐ Restoring backup (if selected)"
   Pop $ChecklistLabel
   CreateFont $2 "Consolas" 9 400
   SendMessage $ChecklistLabel ${WM_SETFONT} $2 0
@@ -53,19 +150,6 @@ FunctionEnd
 
 ; Update checklist status
 !macro UpdateChecklistItem itemNum status
-  ${NSD_GetText} $ChecklistLabel $0
-  ${If} "${status}" == "progress"
-    StrCpy $1 "⟳"  ; In progress symbol
-  ${ElseIf} "${status}" == "done"
-    StrCpy $1 "☑"  ; Checkmark
-  ${ElseIf} "${status}" == "skip"
-    StrCpy $1 "○"  ; Skipped
-  ${Else}
-    StrCpy $1 "☐"  ; Unchecked
-  ${EndIf}
-
-  ; Replace the checkbox at the specified line
-  ; This is a simplified approach - real implementation would parse and update specific lines
   DetailPrint "Step ${itemNum}: ${status}"
 !macroend
 
@@ -73,6 +157,10 @@ FunctionEnd
 ; Main Installation Logic
 ; ============================================================================
 !macro customInstall
+  ; Show restore page first
+  Call RestoreBackupPage
+  Call RestoreBackupPageLeave
+
   ; Show the custom setup page
   Call SetupPrerequisitesPage
 
@@ -96,7 +184,7 @@ FunctionEnd
     !insertmacro UpdateChecklistItem 1 "done"
     !insertmacro UpdateChecklistItem 2 "skip"
     !insertmacro UpdateChecklistItem 3 "skip"
-    SendMessage $ProgressBar ${PBM_SETPOS} 60 0
+    SendMessage $ProgressBar ${PBM_SETPOS} 50 0
     Goto ConfigureService
   ${EndIf}
 
@@ -106,7 +194,7 @@ FunctionEnd
   DetailPrint "MongoDB not found. Downloading installer..."
   ${NSD_SetText} $StatusLabel "Downloading MongoDB installer (~300 MB)..."
   !insertmacro UpdateChecklistItem 2 "progress"
-  SendMessage $ProgressBar ${PBM_SETPOS} 20 0
+  SendMessage $ProgressBar ${PBM_SETPOS} 15 0
 
   ; Download using PowerShell with progress
   nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference = ''SilentlyContinue''; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host ''Downloading MongoDB...''; try { Invoke-WebRequest -Uri ''${MONGO_DOWNLOAD_URL}'' -OutFile ''${MONGO_INSTALLER}'' -UseBasicParsing; Write-Host ''Download complete''; exit 0 } catch { Write-Host ''Download failed: $($_)''; exit 1 }"'
@@ -126,7 +214,7 @@ FunctionEnd
   ${EndIf}
 
   !insertmacro UpdateChecklistItem 2 "done"
-  SendMessage $ProgressBar ${PBM_SETPOS} 40 0
+  SendMessage $ProgressBar ${PBM_SETPOS} 30 0
 
   ; Step 3: Install MongoDB
   DetailPrint "Installing MongoDB..."
@@ -134,20 +222,17 @@ FunctionEnd
   !insertmacro UpdateChecklistItem 3 "progress"
 
   ; Install MongoDB MSI silently
-  ; ADDLOCAL=ServerService,Client - Install MongoDB service and client
-  ; SHOULD_INSTALL_COMPASS=0 - Don't install MongoDB Compass GUI
   nsExec::ExecToLog 'msiexec.exe /i "${MONGO_INSTALLER}" /qn ADDLOCAL=ServerService,Client SHOULD_INSTALL_COMPASS=0 /l*v "$INSTDIR\mongodb-install.log"'
   Pop $0
 
   ${If} $0 != 0
     DetailPrint "WARNING: MongoDB installation returned code $0"
-    ; Don't abort - MongoDB might already be installed
   ${Else}
     DetailPrint "MongoDB installed successfully"
   ${EndIf}
 
   !insertmacro UpdateChecklistItem 3 "done"
-  SendMessage $ProgressBar ${PBM_SETPOS} 60 0
+  SendMessage $ProgressBar ${PBM_SETPOS} 50 0
 
   ; Clean up installer
   Delete "${MONGO_INSTALLER}"
@@ -167,9 +252,12 @@ FunctionEnd
   ; Set service recovery options (auto-restart on failure)
   nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$svc = Get-Service -Name MongoDB,MongoDBServer -ErrorAction SilentlyContinue | Select-Object -First 1; if ($svc) { sc.exe failure $svc.Name reset= 86400 actions= restart/5000/restart/5000/restart/5000 }"'
 
+  ; Wait for MongoDB to start
+  Sleep 2000
+
   DetailPrint "MongoDB service configured"
   !insertmacro UpdateChecklistItem 4 "done"
-  SendMessage $ProgressBar ${PBM_SETPOS} 80 0
+  SendMessage $ProgressBar ${PBM_SETPOS} 70 0
 
   CreateEnv:
   ; Step 5: Create .env file from .env.example
@@ -185,6 +273,54 @@ FunctionEnd
   ${EndIf}
 
   !insertmacro UpdateChecklistItem 5 "done"
+  SendMessage $ProgressBar ${PBM_SETPOS} 85 0
+
+  ; Step 6: Restore backup if requested
+  ${If} $ShouldRestore == "1"
+    DetailPrint "Restoring database from backup..."
+    ${NSD_SetText} $StatusLabel "Restoring database backup..."
+    !insertmacro UpdateChecklistItem 6 "progress"
+
+    ; Create PowerShell script for restore
+    FileOpen $0 "$TEMP\restore-backup.ps1" w
+    FileWrite $0 'param([string]$$BackupDir)$\r$\n'
+    FileWrite $0 '$$ErrorActionPreference = "Stop"$\r$\n'
+    FileWrite $0 '$$mongoUri = "${MONGO_URI}"$\r$\n'
+    FileWrite $0 'Write-Host "Restoring database from: $$BackupDir"$\r$\n'
+    FileWrite $0 'try {$\r$\n'
+    FileWrite $0 '  $$manifest = Get-Content "$$BackupDir\backup-manifest.json" | ConvertFrom-Json$\r$\n'
+    FileWrite $0 '  foreach ($$collection in $$manifest.collections) {$\r$\n'
+    FileWrite $0 '    $$jsonFile = Join-Path $$BackupDir "$$collection.json"$\r$\n'
+    FileWrite $0 '    if (Test-Path $$jsonFile) {$\r$\n'
+    FileWrite $0 '      Write-Host "Importing $$collection..."$\r$\n'
+    FileWrite $0 '      & mongoimport --uri=$$mongoUri --collection=$$collection --file=$$jsonFile --jsonArray --drop$\r$\n'
+    FileWrite $0 '    }$\r$\n'
+    FileWrite $0 '  }$\r$\n'
+    FileWrite $0 '  Write-Host "Restore complete"$\r$\n'
+    FileWrite $0 '  exit 0$\r$\n'
+    FileWrite $0 '} catch {$\r$\n'
+    FileWrite $0 '  Write-Host "Restore failed: $$_"$\r$\n'
+    FileWrite $0 '  exit 1$\r$\n'
+    FileWrite $0 '}$\r$\n'
+    FileClose $0
+
+    ; Run restore script
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\restore-backup.ps1" -BackupDir "$RestorePath"'
+    Pop $0
+
+    Delete "$TEMP\restore-backup.ps1"
+
+    ${If} $0 == 0
+      DetailPrint "Database restored successfully"
+      !insertmacro UpdateChecklistItem 6 "done"
+    ${Else}
+      DetailPrint "WARNING: Database restore failed"
+      !insertmacro UpdateChecklistItem 6 "failed"
+    ${EndIf}
+  ${Else}
+    !insertmacro UpdateChecklistItem 6 "skip"
+  ${EndIf}
+
   SendMessage $ProgressBar ${PBM_SETPOS} 100 0
   ${NSD_SetText} $StatusLabel "Setup complete!"
 
@@ -193,14 +329,152 @@ FunctionEnd
 !macroend
 
 ; ============================================================================
+; Uninstall Backup Page
+; ============================================================================
+Function un.BackupDatabasePage
+  nsDialogs::Create 1018
+  Pop $Dialog
+
+  ${If} $Dialog == error
+    Abort
+  ${EndIf}
+
+  ; Title
+  ${NSD_CreateLabel} 0 0 100% 20u "Database Backup"
+  Pop $0
+  CreateFont $1 "Segoe UI" 12 700
+  SendMessage $0 ${WM_SETFONT} $1 0
+
+  ; Description
+  ${NSD_CreateLabel} 0 25u 100% 20u "Would you like to create a backup of your database before uninstalling?"
+  Pop $0
+
+  ; Checkbox
+  ${NSD_CreateCheckbox} 0 50u 100% 12u "Create database backup"
+  Pop $BackupCheckbox
+  ${NSD_OnClick} $BackupCheckbox un.BackupCheckboxClick
+
+  ; Path label
+  ${NSD_CreateLabel} 10u 70u 80u 12u "Backup directory:"
+  Pop $0
+
+  ; Path text box
+  ${NSD_CreateText} 90u 70u 150u 12u "$DOCUMENTS\Vira Villas Rooms Backup"
+  Pop $RestorePathText
+  EnableWindow $RestorePathText 0
+
+  ; Browse button
+  ${NSD_CreateButton} 245u 69u 50u 14u "Browse..."
+  Pop $0
+  ${NSD_OnClick} $0 un.BrowseBackupDir
+  EnableWindow $0 0
+  StrCpy $R9 $0  ; Store button handle
+
+  nsDialogs::Show
+FunctionEnd
+
+; Handle backup checkbox click
+Function un.BackupCheckboxClick
+  Pop $0
+  ${NSD_GetState} $BackupCheckbox $1
+  ${If} $1 == ${BST_CHECKED}
+    EnableWindow $RestorePathText 1
+    EnableWindow $R9 1
+  ${Else}
+    EnableWindow $RestorePathText 0
+    EnableWindow $R9 0
+  ${EndIf}
+FunctionEnd
+
+; Browse for backup directory
+Function un.BrowseBackupDir
+  nsDialogs::SelectFolderDialog "Select backup destination" "$DOCUMENTS"
+  Pop $0
+  ${If} $0 != error
+    ${NSD_SetText} $RestorePathText $0
+    StrCpy $BackupPath $0
+  ${EndIf}
+FunctionEnd
+
+; Save backup page data
+Function un.BackupDatabasePageLeave
+  ${NSD_GetState} $BackupCheckbox $0
+  ${If} $0 == ${BST_CHECKED}
+    ${NSD_GetText} $RestorePathText $BackupPath
+    StrCpy $ShouldBackup "1"
+  ${Else}
+    StrCpy $ShouldBackup "0"
+  ${EndIf}
+FunctionEnd
+
+; ============================================================================
 ; Uninstall Logic
 ; ============================================================================
 !macro customUnInstall
+  ; Show backup page
+  Call un.BackupDatabasePage
+  Call un.BackupDatabasePageLeave
+
+  ; Create backup if requested
+  ${If} $ShouldBackup == "1"
+    DetailPrint "Creating database backup..."
+    DetailPrint "Backup location: $BackupPath"
+
+    ; Create backup directory
+    CreateDirectory "$BackupPath"
+
+    ; Create PowerShell script for backup
+    FileOpen $0 "$TEMP\backup-database.ps1" w
+    FileWrite $0 'param([string]$$BackupDir)$\r$\n'
+    FileWrite $0 '$$ErrorActionPreference = "Stop"$\r$\n'
+    FileWrite $0 '$$mongoUri = "${MONGO_URI}"$\r$\n'
+    FileWrite $0 'Write-Host "Creating backup in: $$BackupDir"$\r$\n'
+    FileWrite $0 'try {$\r$\n'
+    FileWrite $0 '  # Get all collections$\r$\n'
+    FileWrite $0 '  $$collections = & mongo --quiet --eval "db.getCollectionNames()" $$mongoUri$\r$\n'
+    FileWrite $0 '  $$collectionsArray = $$collections -replace "[\[\]]","" -split ","$\r$\n'
+    FileWrite $0 '  $$collectionsList = @()$\r$\n'
+    FileWrite $0 '  foreach ($$col in $$collectionsArray) {$\r$\n'
+    FileWrite $0 '    $$col = $$col.Trim() -replace ''"'',''''$\r$\n'
+    FileWrite $0 '    if ($$col -and $$col -ne "system.indexes") {$\r$\n'
+    FileWrite $0 '      Write-Host "Exporting $$col..."$\r$\n'
+    FileWrite $0 '      $$outFile = Join-Path $$BackupDir "$$col.json"$\r$\n'
+    FileWrite $0 '      & mongoexport --uri=$$mongoUri --collection=$$col --out=$$outFile --jsonArray$\r$\n'
+    FileWrite $0 '      $$collectionsList += $$col$\r$\n'
+    FileWrite $0 '    }$\r$\n'
+    FileWrite $0 '  }$\r$\n'
+    FileWrite $0 '  # Create manifest$\r$\n'
+    FileWrite $0 '  $$manifest = @{$\r$\n'
+    FileWrite $0 '    timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")$\r$\n'
+    FileWrite $0 '    collections = $$collectionsList$\r$\n'
+    FileWrite $0 '  }$\r$\n'
+    FileWrite $0 '  $$manifest | ConvertTo-Json | Out-File "$$BackupDir\backup-manifest.json"$\r$\n'
+    FileWrite $0 '  Write-Host "Backup complete"$\r$\n'
+    FileWrite $0 '  exit 0$\r$\n'
+    FileWrite $0 '} catch {$\r$\n'
+    FileWrite $0 '  Write-Host "Backup failed: $$_"$\r$\n'
+    FileWrite $0 '  exit 1$\r$\n'
+    FileWrite $0 '}$\r$\n'
+    FileClose $0
+
+    ; Run backup script
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\backup-database.ps1" -BackupDir "$BackupPath"'
+    Pop $0
+
+    Delete "$TEMP\backup-database.ps1"
+
+    ${If} $0 == 0
+      DetailPrint "Backup created successfully at: $BackupPath"
+      MessageBox MB_OK|MB_ICONINFORMATION "Database backup created successfully at:$\r$\n$\r$\n$BackupPath"
+    ${Else}
+      DetailPrint "WARNING: Backup failed"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Failed to create database backup.$\r$\nYou may need to backup manually."
+    ${EndIf}
+  ${EndIf}
+
   DetailPrint "Uninstalling Vira Villas Rooms..."
 
   ; Note: We do NOT uninstall MongoDB as it may be used by other applications
-  ; Users can manually uninstall MongoDB if desired
-
   DetailPrint "Note: MongoDB was not uninstalled and can be removed manually if desired"
 !macroend
 
@@ -209,5 +483,5 @@ FunctionEnd
 ; ============================================================================
 !macro customHeader
   ; Custom installer for Vira Villas Rooms
-  ; Downloads and installs MongoDB and other prerequisites during installation
+  ; Downloads and installs MongoDB during installation with backup/restore support
 !macroend
