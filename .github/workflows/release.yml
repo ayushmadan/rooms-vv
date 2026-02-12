@@ -56,27 +56,29 @@ jobs:
       - name: Verify setup
         shell: pwsh
         run: |
-          echo "=== Verifying electron-builder setup ==="
-          echo "electron-builder version:"
-          npx electron-builder --version
+          echo "=== Verifying installation ==="
+          echo "Checking node_modules/electron-builder:"
+          if (Test-Path node_modules/electron-builder) {
+            echo "✓ electron-builder directory exists"
+          } else {
+            echo "✗ ERROR: electron-builder NOT found!"
+            exit 1
+          }
+          echo ""
+          echo "Checking .bin/electron-builder:"
+          if (Test-Path node_modules/.bin/electron-builder.cmd) {
+            echo "✓ electron-builder.cmd exists"
+          }
+          echo ""
+          echo "Running: node node_modules/electron-builder/out/cli/cli.js --version"
+          node node_modules/electron-builder/out/cli/cli.js --version
           echo ""
           echo "electron version:"
           npx electron --version
-          echo ""
-          echo "Checking electron/main.js:"
-          if (Test-Path electron/main.js) {
-            echo "✓ electron/main.js exists"
-          } else {
-            echo "✗ ERROR: electron/main.js NOT found!"
-            exit 1
-          }
 
       - name: Build MSI Installer
-        run: |
-          echo "Starting electron-builder build..."
-          npx electron-builder --win msi --verbose 2>&1
-          echo "electron-builder exit code: $?"
-        shell: bash
+        run: node node_modules/electron-builder/out/cli/cli.js --win msi --verbose
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEBUG: electron-builder,electron-builder:*
