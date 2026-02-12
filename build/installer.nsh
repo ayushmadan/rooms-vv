@@ -7,7 +7,6 @@
 ; MongoDB configuration
 !define MONGO_VERSION "8.0.4"
 !define MONGO_DOWNLOAD_URL "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-${MONGO_VERSION}-signed.msi"
-!define MONGO_INSTALLER "$TEMP\mongodb-installer.msi"
 
 ; ============================================================================
 ; Main Installation Logic
@@ -51,7 +50,7 @@
 
   ; Step 2: Download MongoDB installer
   DetailPrint "MongoDB not found. Downloading installer..."
-  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$$ProgressPreference = ''SilentlyContinue''; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host ''Downloading MongoDB...''; try { Invoke-WebRequest -Uri ''${MONGO_DOWNLOAD_URL}'' -OutFile ''${MONGO_INSTALLER}'' -UseBasicParsing; Write-Host ''Download complete''; exit 0 } catch { Write-Host ''Download failed: $$($$_)''; exit 1 }"'
+  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$$ProgressPreference = ''SilentlyContinue''; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host ''Downloading MongoDB...''; try { Invoke-WebRequest -Uri ''${MONGO_DOWNLOAD_URL}'' -OutFile ''$$env:TEMP\mongodb-installer.msi'' -UseBasicParsing; Write-Host ''Download complete''; exit 0 } catch { Write-Host ''Download failed: $$($$_)''; exit 1 }"'
   Pop $0
 
   ${If} $0 != 0
@@ -65,7 +64,7 @@
 
   ; Step 3: Install MongoDB
   DetailPrint "Installing MongoDB..."
-  nsExec::ExecToLog 'msiexec.exe /i "${MONGO_INSTALLER}" /qn ADDLOCAL=ServerService,Client SHOULD_INSTALL_COMPASS=0 /l*v "$INSTDIR\mongodb-install.log"'
+  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "msiexec.exe /i \"$$env:TEMP\mongodb-installer.msi\" /qn ADDLOCAL=ServerService,Client SHOULD_INSTALL_COMPASS=0 /l*v \"$INSTDIR\mongodb-install.log\""'
   Pop $0
 
   ${If} $0 != 0
@@ -75,7 +74,7 @@
   ${EndIf}
 
   ; Clean up installer
-  Delete "${MONGO_INSTALLER}"
+  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item \"$$env:TEMP\mongodb-installer.msi\" -ErrorAction SilentlyContinue"'
 
   ; Wait for service to register
   Sleep 3000
