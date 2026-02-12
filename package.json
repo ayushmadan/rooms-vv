@@ -1,6 +1,6 @@
 {
   "name": "rooms-vv",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Offline-first room allocation desktop app",
   "author": "Ayush Madan",
   "main": "electron/main.js",
