@@ -1,4 +1,4 @@
-name: Build and Release MSI
+name: Build and Release Windows Installer
 
 on:
   push:
@@ -76,8 +76,8 @@ jobs:
           echo "electron version:"
           npx electron --version
 
-      - name: Build MSI Installer
-        run: node node_modules/electron-builder/out/cli/cli.js --win msi
+      - name: Build NSIS Installer
+        run: node node_modules/electron-builder/out/cli/cli.js --win nsis
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,17 +96,17 @@ jobs:
             Get-ChildItem
           }
 
-      - name: Get MSI filename
-        id: msi
+      - name: Get installer filename
+        id: installer
         shell: pwsh
         run: |
-          $msiFile = Get-ChildItem -Path dist\*.msi | Select-Object -First 1
-          if ($msiFile) {
-            echo "MSI_PATH=$($msiFile.FullName)" >> $env:GITHUB_OUTPUT
-            echo "MSI_NAME=$($msiFile.Name)" >> $env:GITHUB_OUTPUT
-            echo "Found MSI: $($msiFile.Name)"
+          $installerFile = Get-ChildItem -Path dist\*.exe | Where-Object { $_.Name -notlike '*Web Setup*' } | Select-Object -First 1
+          if ($installerFile) {
+            echo "INSTALLER_PATH=$($installerFile.FullName)" >> $env:GITHUB_OUTPUT
+            echo "INSTALLER_NAME=$($installerFile.Name)" >> $env:GITHUB_OUTPUT
+            echo "Found installer: $($installerFile.Name)"
           } else {
-            echo "Error: No MSI file found in dist/"
+            echo "Error: No installer file found in dist/"
             exit 1
           }
 
@@ -123,13 +123,14 @@ jobs:
 
             ### Download and Install
 
-            1. Download the installer below
+            1. Download the installer below (.exe file)
             2. Run the installer (requires administrator privileges)
             3. The installer will automatically:
-               - Install MongoDB if not already present (~2-3 minutes)
+               - Download and install MongoDB if not already present (requires internet connection)
                - Configure MongoDB to start on system startup
                - Set up the application
                - Create desktop and start menu shortcuts
+            4. Installation takes 5-10 minutes depending on internet speed
 
             ### Features
 
@@ -159,15 +160,15 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload MSI to Release
+      - name: Upload Installer to Release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.msi.outputs.MSI_PATH }}
-          asset_name: ${{ steps.msi.outputs.MSI_NAME }}
-          asset_content_type: application/x-msi
+          asset_path: ${{ steps.installer.outputs.INSTALLER_PATH }}
+          asset_name: ${{ steps.installer.outputs.INSTALLER_NAME }}
+          asset_content_type: application/x-msdownload
 
       - name: Update latest release tag
         shell: pwsh
