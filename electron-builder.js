@@ -38,13 +38,16 @@ module.exports = {
     const path = require('path');
 
     if (context.platform.name === 'windows') {
+      // Use process.cwd() instead of context.projectDir
+      const projectDir = process.cwd();
+
       // Ensure build/installers directory exists
-      const installersDir = path.join(context.projectDir, 'build', 'installers');
+      const installersDir = path.join(projectDir, 'build', 'installers');
       fs.mkdirSync(installersDir, { recursive: true });
 
       console.log('📥 Downloading MongoDB installer...');
 
-      const downloadScript = path.join(context.projectDir, 'scripts', 'windows', 'download-prerequisites.ps1');
+      const downloadScript = path.join(projectDir, 'scripts', 'windows', 'download-prerequisites.ps1');
 
       if (!fs.existsSync(downloadScript)) {
         console.log('⚠ Download script not found, skipping');
@@ -58,7 +61,7 @@ module.exports = {
           '-File', downloadScript
         ], {
           stdio: 'inherit',
-          cwd: context.projectDir
+          cwd: projectDir
         });
 
         ps.on('close', (code) => {
@@ -83,13 +86,14 @@ module.exports = {
     const path = require('path');
 
     if (context.electronPlatformName === 'win32') {
+      const projectDir = process.cwd();
       const appOutDir = context.appOutDir;
       const resourcesDir = path.join(appOutDir, 'resources');
 
       fs.mkdirSync(resourcesDir, { recursive: true });
 
       // Copy post-install script
-      const postInstallSrc = path.join(context.projectDir, 'scripts', 'windows', 'post-install.ps1');
+      const postInstallSrc = path.join(projectDir, 'scripts', 'windows', 'post-install.ps1');
       const postInstallDest = path.join(resourcesDir, 'post-install.ps1');
 
       if (fs.existsSync(postInstallSrc)) {
