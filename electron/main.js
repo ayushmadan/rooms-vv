@@ -330,7 +330,12 @@ async function runFirstTimeSetup() {
 
   // Only run setup on Windows
   if (process.platform === 'win32') {
-    const postInstallScript = path.join(appPath, 'scripts', 'windows', 'post-install.ps1');
+    // Check for post-install script in multiple locations
+    let postInstallScript = path.join(appPath, 'resources', 'post-install.ps1');
+
+    if (!fs.existsSync(postInstallScript)) {
+      postInstallScript = path.join(appPath, 'scripts', 'windows', 'post-install.ps1');
+    }
 
     if (fs.existsSync(postInstallScript)) {
       return new Promise((resolve) => {
