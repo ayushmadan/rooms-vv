@@ -24,9 +24,7 @@ module.exports = {
     createStartMenuShortcut: true,
     runAfterFinish: true,
     deleteAppDataOnUninstall: false,
-    // Use custom NSIS script for MongoDB installation
-    include: "build/installer.nsh",
-    // Custom installer script will handle MongoDB setup during installation
-    installerSidebar: "build/installer-sidebar.bmp"
+    // Use custom NSIS script for MongoDB installation and backup/restore
+    include: "build/installer.nsh"
   }
 };
