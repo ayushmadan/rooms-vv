@@ -57,6 +57,21 @@ jobs:
         run: npm run build:msi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: electron-builder
+
+      - name: List output directory
+        shell: pwsh
+        run: |
+          echo "Checking for dist directory..."
+          if (Test-Path dist) {
+            echo "dist directory exists!"
+            echo "Contents:"
+            Get-ChildItem dist -Recurse
+          } else {
+            echo "ERROR: dist directory does NOT exist!"
+            echo "Current directory contents:"
+            Get-ChildItem
+          }
 
       - name: Get MSI filename
         id: msi
