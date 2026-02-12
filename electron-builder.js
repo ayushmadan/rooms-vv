@@ -17,77 +17,23 @@ module.exports = {
   win: {
     target: [
       {
-        target: "nsis",
+        target: "msi",
         arch: ["x64"]
       }
     ],
     artifactName: "ViraVillasRooms-${version}-Setup.${ext}"
   },
-  nsis: {
+  msi: {
     oneClick: false,
     perMachine: true,
-    allowToChangeInstallationDirectory: true,
+    runAfterFinish: false,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    runAfterFinish: false,
-    deleteAppDataOnUninstall: false
+    menuCategory: true,
+    warningsAsErrors: false
   },
-  // extraResources: [
-  //   {
-  //     from: "build/installers",
-  //     to: "installers",
-  //     filter: ["**/*"]
-  //   }
-  // ],
   mac: {
     target: ["dmg"]
-  },
-  // Before build hook to download prerequisites
-  beforeBuild: async (context) => {
-    const { spawn } = require('child_process');
-    const path = require('path');
-    const fs = require('fs');
-
-    if (context.platform.name === 'windows') {
-      // Ensure build/installers directory exists
-      const installersDir = path.join(context.projectDir, 'build', 'installers');
-      fs.mkdirSync(installersDir, { recursive: true });
-
-      console.log('Downloading prerequisites for bundled installer...');
-
-      const downloadScript = path.join(context.projectDir, 'scripts', 'windows', 'download-prerequisites.ps1');
-
-      // Check if download script exists
-      if (!fs.existsSync(downloadScript)) {
-        console.log('⚠ Download script not found, skipping prerequisite download');
-        return Promise.resolve();
-      }
-
-      return new Promise((resolve) => {
-        const ps = spawn('powershell.exe', [
-          '-NoProfile',
-          '-ExecutionPolicy', 'Bypass',
-          '-File', downloadScript
-        ], {
-          stdio: 'inherit',
-          cwd: context.projectDir
-        });
-
-        ps.on('close', (code) => {
-          if (code === 0) {
-            console.log('✓ Prerequisites downloaded successfully');
-          } else {
-            console.log('⚠ Failed to download prerequisites (continuing anyway)');
-          }
-          resolve();
-        });
-
-        ps.on('error', (err) => {
-          console.log('⚠ Error running download script:', err.message);
-          resolve();
-        });
-      });
-    }
   },
   // After pack hook to prepare installation scripts
   afterPack: async (context) => {
@@ -135,32 +81,22 @@ if %ERRORLEVEL% NEQ 0 (
     const readmePath = path.join(buildResult.outDir, 'INSTALLATION_NOTES.txt');
     const readmeContent = `Vira Villas Rooms - Installation Notes
 
-BUNDLED INSTALLER (NSIS):
-The installer bundles MongoDB and installs it automatically during setup.
-This is similar to how games bundle DirectX or Visual C++ Runtime.
-
 AUTOMATIC SETUP:
 The installer will automatically:
-1. Install MongoDB (if not already present) - takes 2-3 minutes
-2. Configure MongoDB service to start automatically
+1. Download and install MongoDB (if not present)
+2. Configure MongoDB to start automatically
 3. Create the .env configuration file
-4. Set up desktop and start menu shortcuts
+4. Set up the application to run at startup
 
-INSTALLATION PROCESS:
-1. Run the installer (requires administrator privileges)
-2. Choose installation directory
-3. Wait for MongoDB installation (if needed)
-4. Application will be ready to use!
-
-MANUAL MONGODB INSTALLATION (if needed):
-If MongoDB installation fails during setup:
+MANUAL SETUP (if automatic setup fails):
 1. Install MongoDB from: https://www.mongodb.com/try/download/community
 2. Ensure MongoDB service is running
-3. Start the application from desktop shortcut
+3. Navigate to the installation directory (usually C:\\Program Files\\Vira Villas Rooms)
+4. Run the setup manually:
+   powershell -ExecutionPolicy Bypass -File resources\\post-install.ps1
 
 TROUBLESHOOTING:
 - If the app doesn't start, check if MongoDB service is running
-- Check Windows Services for "MongoDB" or "MongoDBServer"
 - Check the .env file in the installation directory
 - Default MongoDB URI: mongodb://127.0.0.1:27017/roomsvv
 - Default Admin PIN: 5597
