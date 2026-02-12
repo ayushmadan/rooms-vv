@@ -281,33 +281,10 @@ FunctionEnd
     ${NSD_SetText} $StatusLabel "Restoring database backup..."
     !insertmacro UpdateChecklistItem 6 "progress"
 
-    ; Create PowerShell script for restore
-    FileOpen $0 "$TEMP\restore-backup.ps1" w
-    FileWrite $0 'param([string]$$BackupDir)$\r$\n'
-    FileWrite $0 '$$ErrorActionPreference = "Stop"$\r$\n'
-    FileWrite $0 '$$mongoUri = "${MONGO_URI}"$\r$\n'
-    FileWrite $0 'Write-Host "Restoring database from: $$BackupDir"$\r$\n'
-    FileWrite $0 'try {$\r$\n'
-    FileWrite $0 '  $$manifest = Get-Content "$$BackupDir\backup-manifest.json" | ConvertFrom-Json$\r$\n'
-    FileWrite $0 '  foreach ($$collection in $$manifest.collections) {$\r$\n'
-    FileWrite $0 '    $$jsonFile = Join-Path $$BackupDir "$$collection.json"$\r$\n'
-    FileWrite $0 '    if (Test-Path $$jsonFile) {$\r$\n'
-    FileWrite $0 '      Write-Host "Importing $$collection..."$\r$\n'
-    FileWrite $0 '      & mongoimport --uri=$$mongoUri --collection=$$collection --file=$$jsonFile --jsonArray --drop$\r$\n'
-    FileWrite $0 '    }$\r$\n'
-    FileWrite $0 '  }$\r$\n'
-    FileWrite $0 '  Write-Host "Restore complete"$\r$\n'
-    FileWrite $0 '  exit 0$\r$\n'
-    FileWrite $0 '} catch {$\r$\n'
-    FileWrite $0 '  Write-Host "Restore failed: $$_"$\r$\n'
-    FileWrite $0 '  exit 1$\r$\n'
-    FileWrite $0 '}$\r$\n'
-    FileClose $0
-
-    ; Run restore script
+    ; Copy restore script to temp and run it
+    CopyFiles "$INSTDIR\scripts\windows\restore-backup.ps1" "$TEMP\restore-backup.ps1"
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\restore-backup.ps1" -BackupDir "$RestorePath"'
     Pop $0
-
     Delete "$TEMP\restore-backup.ps1"
 
     ${If} $0 == 0
@@ -423,44 +400,10 @@ FunctionEnd
     ; Create backup directory
     CreateDirectory "$BackupPath"
 
-    ; Create PowerShell script for backup
-    FileOpen $0 "$TEMP\backup-database.ps1" w
-    FileWrite $0 'param([string]$$BackupDir)$\r$\n'
-    FileWrite $0 '$$ErrorActionPreference = "Stop"$\r$\n'
-    FileWrite $0 '$$mongoUri = "${MONGO_URI}"$\r$\n'
-    FileWrite $0 'Write-Host "Creating backup in: $$BackupDir"$\r$\n'
-    FileWrite $0 'try {$\r$\n'
-    FileWrite $0 '  # Get all collections$\r$\n'
-    FileWrite $0 '  $$collections = & mongo --quiet --eval "db.getCollectionNames()" $$mongoUri$\r$\n'
-    FileWrite $0 '  $$collectionsArray = $$collections -replace "[\[\]]","" -split ","$\r$\n'
-    FileWrite $0 '  $$collectionsList = @()$\r$\n'
-    FileWrite $0 '  foreach ($$col in $$collectionsArray) {$\r$\n'
-    FileWrite $0 '    $$col = $$col.Trim() -replace ''"'',''''$\r$\n'
-    FileWrite $0 '    if ($$col -and $$col -ne "system.indexes") {$\r$\n'
-    FileWrite $0 '      Write-Host "Exporting $$col..."$\r$\n'
-    FileWrite $0 '      $$outFile = Join-Path $$BackupDir "$$col.json"$\r$\n'
-    FileWrite $0 '      & mongoexport --uri=$$mongoUri --collection=$$col --out=$$outFile --jsonArray$\r$\n'
-    FileWrite $0 '      $$collectionsList += $$col$\r$\n'
-    FileWrite $0 '    }$\r$\n'
-    FileWrite $0 '  }$\r$\n'
-    FileWrite $0 '  # Create manifest$\r$\n'
-    FileWrite $0 '  $$manifest = @{$\r$\n'
-    FileWrite $0 '    timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")$\r$\n'
-    FileWrite $0 '    collections = $$collectionsList$\r$\n'
-    FileWrite $0 '  }$\r$\n'
-    FileWrite $0 '  $$manifest | ConvertTo-Json | Out-File "$$BackupDir\backup-manifest.json"$\r$\n'
-    FileWrite $0 '  Write-Host "Backup complete"$\r$\n'
-    FileWrite $0 '  exit 0$\r$\n'
-    FileWrite $0 '} catch {$\r$\n'
-    FileWrite $0 '  Write-Host "Backup failed: $$_"$\r$\n'
-    FileWrite $0 '  exit 1$\r$\n'
-    FileWrite $0 '}$\r$\n'
-    FileClose $0
-
-    ; Run backup script
+    ; Copy backup script to temp and run it
+    CopyFiles "$INSTDIR\scripts\windows\backup-database.ps1" "$TEMP\backup-database.ps1"
     nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\backup-database.ps1" -BackupDir "$BackupPath"'
     Pop $0
-
     Delete "$TEMP\backup-database.ps1"
 
     ${If} $0 == 0

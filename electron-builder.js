@@ -8,6 +8,8 @@ module.exports = {
   files: [
     "electron/**/*",
     "app/**/*",
+    "scripts/windows/backup-database.ps1",
+    "scripts/windows/restore-backup.ps1",
     "node_modules/**/*",
     "package.json",
     "package-lock.json",
