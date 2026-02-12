@@ -4,10 +4,6 @@
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
-; Variables
-Var RestorePath
-Var BackupPath
-
 ; MongoDB configuration
 !define MONGO_VERSION "8.0.4"
 !define MONGO_DOWNLOAD_URL "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-${MONGO_VERSION}-signed.msi"
@@ -19,21 +15,21 @@ Var BackupPath
 !macro customInstall
   DetailPrint "=== Starting Prerequisites Installation ==="
 
-  ; Ask about restore
+  ; Ask about restore ($R0 = restore path)
   MessageBox MB_YESNO "Do you want to restore from a previous backup?" IDYES AskRestorePath IDNO SkipRestore
 
   AskRestorePath:
   nsDialogs::SelectFolderDialog "Select backup directory" ""
-  Pop $RestorePath
-  ${If} $RestorePath != error
-    ${If} ${FileExists} "$RestorePath\backup-manifest.json"
-      DetailPrint "Will restore from: $RestorePath"
+  Pop $R0
+  ${If} $R0 != error
+    ${If} ${FileExists} "$R0\backup-manifest.json"
+      DetailPrint "Will restore from: $R0"
     ${Else}
       MessageBox MB_OK|MB_ICONEXCLAMATION "Invalid backup directory. Could not find backup-manifest.json.$\r$\nSkipping restore."
-      StrCpy $RestorePath ""
+      StrCpy $R0 ""
     ${EndIf}
   ${Else}
-    StrCpy $RestorePath ""
+    StrCpy $R0 ""
   ${EndIf}
 
   SkipRestore:
@@ -108,17 +104,17 @@ Var BackupPath
     ${EndIf}
   ${EndIf}
 
-  ; Step 6: Restore backup if requested
-  ${If} $RestorePath != ""
+  ; Step 6: Restore backup if requested (using $R0 from earlier)
+  ${If} $R0 != ""
     DetailPrint "Restoring database from backup..."
     CopyFiles "$INSTDIR\scripts\windows\restore-backup.ps1" "$TEMP\restore-backup.ps1"
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\restore-backup.ps1" -BackupDir "$RestorePath"'
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\restore-backup.ps1" -BackupDir "$R0"'
     Pop $0
     Delete "$TEMP\restore-backup.ps1"
 
     ${If} $0 == 0
       DetailPrint "Database restored successfully"
-      MessageBox MB_OK|MB_ICONINFORMATION "Database restored successfully from:$\r$\n$RestorePath"
+      MessageBox MB_OK|MB_ICONINFORMATION "Database restored successfully from:$\r$\n$R0"
     ${Else}
       DetailPrint "WARNING: Database restore failed"
       MessageBox MB_OK|MB_ICONEXCLAMATION "Failed to restore database backup.$\r$\nYou may need to restore manually."
@@ -132,28 +128,28 @@ Var BackupPath
 ; Uninstall Logic
 ; ============================================================================
 !macro customUnInstall
-  ; Ask about backup
+  ; Ask about backup ($R1 = backup path)
   MessageBox MB_YESNO "Would you like to create a backup of your database before uninstalling?" IDYES AskBackupPath IDNO SkipBackup
 
   AskBackupPath:
   nsDialogs::SelectFolderDialog "Select backup destination" "$DOCUMENTS"
-  Pop $BackupPath
-  ${If} $BackupPath != error
+  Pop $R1
+  ${If} $R1 != error
     DetailPrint "Creating database backup..."
-    DetailPrint "Backup location: $BackupPath"
+    DetailPrint "Backup location: $R1"
 
     ; Create backup directory
-    CreateDirectory "$BackupPath"
+    CreateDirectory "$R1"
 
     ; Copy backup script to temp and run it
     CopyFiles "$INSTDIR\scripts\windows\backup-database.ps1" "$TEMP\backup-database.ps1"
-    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\backup-database.ps1" -BackupDir "$BackupPath"'
+    nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\backup-database.ps1" -BackupDir "$R1"'
     Pop $0
     Delete "$TEMP\backup-database.ps1"
 
     ${If} $0 == 0
-      DetailPrint "Backup created successfully at: $BackupPath"
-      MessageBox MB_OK|MB_ICONINFORMATION "Database backup created successfully at:$\r$\n$\r$\n$BackupPath"
+      DetailPrint "Backup created successfully at: $R1"
+      MessageBox MB_OK|MB_ICONINFORMATION "Database backup created successfully at:$\r$\n$\r$\n$R1"
     ${Else}
       DetailPrint "WARNING: Backup failed"
       MessageBox MB_OK|MB_ICONEXCLAMATION "Failed to create database backup.$\r$\nYou may need to backup manually."
