@@ -30,19 +30,15 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     runAfterFinish: false,
-    // Include custom NSIS script for installing prerequisites
-    include: "build/installer.nsh",
-    // Bundle MongoDB installer as extra resource
-    installerLanguages: ["en_US"],
     deleteAppDataOnUninstall: false
   },
-  extraResources: [
-    {
-      from: "build/installers",
-      to: "installers",
-      filter: ["**/*"]
-    }
-  ],
+  // extraResources: [
+  //   {
+  //     from: "build/installers",
+  //     to: "installers",
+  //     filter: ["**/*"]
+  //   }
+  // ],
   mac: {
     target: ["dmg"]
   },

@@ -2,6 +2,10 @@
 ; This installs MongoDB and other prerequisites during installation
 ; Similar to how games install DirectX, Visual C++ Runtime, etc.
 
+; Include required NSIS libraries
+!include "LogicLib.nsh"
+!include "FileFunc.nsh"
+
 !macro customInstall
   DetailPrint "Checking for MongoDB installation..."
 
