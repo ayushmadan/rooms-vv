@@ -77,11 +77,10 @@ jobs:
           npx electron --version
 
       - name: Build MSI Installer
-        run: node node_modules/electron-builder/out/cli/cli.js --win msi --verbose
+        run: node node_modules/electron-builder/out/cli/cli.js --win msi
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEBUG: electron-builder,electron-builder:*
 
       - name: List output directory
         shell: pwsh

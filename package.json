@@ -1,6 +1,6 @@
 {
   "name": "rooms-vv",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Offline-first room allocation desktop app",
   "author": "Ayush Madan",
   "main": "electron/main.js",
@@ -9,7 +9,7 @@
     "dev:backend": "nodemon app/backend/src/index.js",
     "dev:electron": "wait-on tcp:4000 && electron .",
     "start": "node app/backend/src/index.js",
-    "build:msi": "electron-builder --win msi --verbose",
+    "build:msi": "electron-builder --win msi",
     "build:win": "electron-builder --win msi",
     "build:msi:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/windows/build-msi.ps1",
     "download:prerequisites": "powershell -ExecutionPolicy Bypass -File scripts/windows/download-prerequisites.ps1",
