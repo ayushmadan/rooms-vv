@@ -22,7 +22,8 @@ if ($Version -ne "") {
 npm ci
 
 Write-Host ""
-Write-Host "=== Building MSI with Bundled Prerequisites ===" -ForegroundColor Cyan
+Write-Host "=== Building Windows Installer with Bundled Prerequisites ===" -ForegroundColor Cyan
+Write-Host "Using NSIS installer (like DirectX installers)" -ForegroundColor Gray
 Write-Host "The installer will include MongoDB and other prerequisites" -ForegroundColor Gray
 Write-Host ""
 
@@ -30,6 +31,6 @@ npm run build:msi
 
 Write-Host ""
 Write-Host "=== Build Complete ===" -ForegroundColor Green
-Write-Host "MSI installer available in dist/ directory" -ForegroundColor White
+Write-Host "Windows installer available in dist/ directory" -ForegroundColor White
 Write-Host "The installer includes bundled MongoDB and will install it automatically" -ForegroundColor Gray
 Write-Host ""

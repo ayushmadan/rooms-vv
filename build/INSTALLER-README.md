@@ -1,6 +1,12 @@
-# Bundled MSI Installer
+# Bundled NSIS Installer
 
-This MSI installer bundles MongoDB and other prerequisites directly within the installer package, similar to how game installers bundle DirectX and other runtime dependencies.
+This Windows installer uses NSIS (Nullsoft Scriptable Install System) and bundles MongoDB and other prerequisites directly within the installer package, similar to how game installers bundle DirectX and other runtime dependencies.
+
+**Why NSIS instead of MSI?**
+- Better support for running bundled installers during setup
+- Same technology used by games, Steam, and many popular Windows applications
+- More flexible and easier to customize for prerequisite installation
+- Widely trusted by Windows users
 
 ## How It Works
 
@@ -12,16 +18,16 @@ The installer follows this approach:
    - Setup scripts are generated
 
 2. **Build Phase**:
-   - Electron-builder packages the app with WiX Toolset
-   - Custom WiX XML template (`installer.wxs`) defines installation steps
-   - MongoDB installer and scripts are bundled into the MSI
+   - Electron-builder packages the app with NSIS
+   - Custom NSIS script (`installer.nsh`) defines installation steps
+   - MongoDB installer and scripts are bundled into the .exe installer
 
-3. **Installation Phase** (when user runs the MSI):
-   - MSI extracts all files including bundled MongoDB installer
-   - Custom actions run MongoDB installer silently
+3. **Installation Phase** (when user runs the .exe):
+   - Installer extracts all files including bundled MongoDB installer
+   - Custom NSIS macros run MongoDB installer silently
    - MongoDB service is configured and started
    - Environment files (.env) are created
-   - Application is configured for auto-start
+   - Desktop and start menu shortcuts are created
 
 ## Building the Installer
 
@@ -67,14 +73,17 @@ When end users run the MSI:
 5. **Environment Setup**: Creates `.env` file from `.env.example`
 6. **Shortcuts**: Creates desktop and start menu shortcuts
 
-## WiX Custom Actions
+## NSIS Custom Macros
 
-The installer uses these custom actions (defined in `build/installer.wxs`):
+The installer uses these custom macros (defined in `build/installer.nsh`):
 
-- **InstallMongoDB**: Runs MongoDB MSI installer with silent flags
-- **ConfigureMongoService**: Sets MongoDB service to auto-start
-- **SetMongoRecovery**: Configures service recovery options
-- **CreateEnvFile**: Creates .env configuration file
+- **customInstall**: Main installation macro that:
+  - Checks if MongoDB is already installed
+  - Runs MongoDB MSI installer with silent flags if needed
+  - Configures MongoDB service to auto-start
+  - Sets service recovery options
+  - Creates .env configuration file from .env.example
+- **customUnInstall**: Uninstall macro (preserves MongoDB for other apps)
 
 ## File Structure
 
@@ -83,13 +92,13 @@ build/
 ├── installers/              # Downloaded during build
 │   ├── mongodb-installer.msi    # MongoDB installer (~300 MB)
 │   └── setup-mongodb.ps1        # MongoDB configuration script
-├── installer.wxs            # WiX XML template for custom actions
+├── installer.nsh            # NSIS script for custom installation steps
 └── icon.png                 # Application icon
 
 scripts/windows/
 ├── download-prerequisites.ps1   # Downloads MongoDB installer
 ├── build-msi.ps1               # Build pipeline script
-├── post-install.ps1            # Legacy post-install (now mostly in WiX)
+├── post-install.ps1            # Legacy post-install script
 └── ensure-mongo.ps1            # MongoDB verification utility
 ```
 
@@ -132,10 +141,11 @@ Example for adding Visual C++ Redistributable:
 - Check internet connection
 - Verify MongoDB download URL is accessible
 
-**Error: WiX compilation failed**
-- Ensure WiX Toolset is installed (electron-builder includes it)
-- Check `build/installer.wxs` for XML syntax errors
+**Error: NSIS compilation failed**
+- Ensure NSIS is properly installed (electron-builder includes it)
+- Check `build/installer.nsh` for syntax errors
 - Review electron-builder logs in console
+- Verify MongoDB installer was downloaded to build/installers/
 
 ### Installation Issues
 
@@ -151,11 +161,11 @@ Example for adding Visual C++ Redistributable:
 
 ## Technical Details
 
-### MSI Package Size
+### Installer Package Size
 
 - Base application: ~200 MB (includes Node.js, Electron, dependencies)
 - MongoDB installer: ~300 MB
-- **Total MSI size: ~500 MB**
+- **Total installer size: ~500 MB**
 
 ### Installation Time
 
@@ -180,13 +190,14 @@ The installer uses a fixed `upgradeCode` to support upgrades:
 - ❌ User might close installer before setup completes
 - ✅ Smaller MSI download size
 
-### New Approach (Bundled Installer)
-- ✅ All prerequisites bundled in MSI
-- ✅ Works offline after downloading MSI once
+### New Approach (Bundled NSIS Installer)
+- ✅ All prerequisites bundled in installer
+- ✅ Works offline after downloading installer once
 - ✅ Guaranteed to have MongoDB installer
-- ✅ Professional installation experience
+- ✅ Professional installation experience (same as games)
 - ✅ Single-step installation
-- ❌ Larger MSI download size (~500 MB vs ~200 MB)
+- ✅ Better error handling and progress display
+- ❌ Larger installer download size (~500 MB vs ~200 MB)
 
 ## License Considerations
 
@@ -194,6 +205,7 @@ MongoDB Community Server is licensed under SSPL (Server Side Public License). Bu
 
 ## References
 
-- [WiX Toolset Documentation](https://wixtoolset.org/docs/)
-- [Electron Builder - MSI Target](https://www.electron.build/configuration/msi)
+- [NSIS Documentation](https://nsis.sourceforge.io/Docs/)
+- [Electron Builder - NSIS Target](https://www.electron.build/configuration/nsis)
+- [Electron Builder - Custom NSIS Script](https://www.electron.build/configuration/nsis#custom-nsis-script)
 - [MongoDB Download Center](https://www.mongodb.com/try/download/community)

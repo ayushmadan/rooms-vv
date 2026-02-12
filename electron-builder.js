@@ -18,27 +18,32 @@ module.exports = {
   win: {
     target: [
       {
-        target: "msi",
+        target: "nsis",
         arch: ["x64"]
       }
     ],
     artifactName: "ViraVillasRooms-${version}-Setup.${ext}"
   },
-  msi: {
+  nsis: {
     oneClick: false,
     perMachine: true,
-    runAfterFinish: false,
+    allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    menuCategory: true,
-    warningsAsErrors: false,
-    // Custom WiX configuration to bundle and install prerequisites
-    perMachine: true,
-    upgradeCode: "A1B2C3D4-E5F6-4A5B-8C9D-0E1F2A3B4C5D",
-    // Include custom WiX XML for bundled installers
-    extensions: ["WixUtilExtension"],
-    include: "build/installer.wxs"
+    runAfterFinish: false,
+    // Include custom NSIS script for installing prerequisites
+    include: "build/installer.nsh",
+    // Bundle MongoDB installer as extra resource
+    installerLanguages: ["en_US"],
+    deleteAppDataOnUninstall: false
   },
+  extraResources: [
+    {
+      from: "build/installers",
+      to: "installers",
+      filter: ["**/*"]
+    }
+  ],
   mac: {
     target: ["dmg"]
   },
@@ -126,22 +131,32 @@ if %ERRORLEVEL% NEQ 0 (
     const readmePath = path.join(buildResult.outDir, 'INSTALLATION_NOTES.txt');
     const readmeContent = `Vira Villas Rooms - Installation Notes
 
+BUNDLED INSTALLER (NSIS):
+The installer bundles MongoDB and installs it automatically during setup.
+This is similar to how games bundle DirectX or Visual C++ Runtime.
+
 AUTOMATIC SETUP:
 The installer will automatically:
-1. Download and install MongoDB (if not present)
-2. Configure MongoDB to start automatically
+1. Install MongoDB (if not already present) - takes 2-3 minutes
+2. Configure MongoDB service to start automatically
 3. Create the .env configuration file
-4. Set up the application to run at startup
+4. Set up desktop and start menu shortcuts
 
-MANUAL SETUP (if automatic setup fails):
+INSTALLATION PROCESS:
+1. Run the installer (requires administrator privileges)
+2. Choose installation directory
+3. Wait for MongoDB installation (if needed)
+4. Application will be ready to use!
+
+MANUAL MONGODB INSTALLATION (if needed):
+If MongoDB installation fails during setup:
 1. Install MongoDB from: https://www.mongodb.com/try/download/community
 2. Ensure MongoDB service is running
-3. Navigate to the installation directory (usually C:\\Program Files\\Vira Villas Rooms)
-4. Run the setup manually:
-   powershell -ExecutionPolicy Bypass -File resources\\post-install.ps1
+3. Start the application from desktop shortcut
 
 TROUBLESHOOTING:
 - If the app doesn't start, check if MongoDB service is running
+- Check Windows Services for "MongoDB" or "MongoDBServer"
 - Check the .env file in the installation directory
 - Default MongoDB URI: mongodb://127.0.0.1:27017/roomsvv
 - Default Admin PIN: 5597
