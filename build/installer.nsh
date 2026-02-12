@@ -48,33 +48,33 @@
     Goto ConfigureService
   ${EndIf}
 
-  ; Step 2: Download MongoDB installer
-  DetailPrint "MongoDB not found. Downloading installer..."
-  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$$ProgressPreference = ''SilentlyContinue''; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Write-Host ''Downloading MongoDB...''; try { Invoke-WebRequest -Uri ''${MONGO_DOWNLOAD_URL}'' -OutFile ''$$env:TEMP\mongodb-installer.msi'' -UseBasicParsing; Write-Host ''Download complete''; exit 0 } catch { Write-Host ''Download failed: $$($$_)''; exit 1 }"'
-  Pop $0
+  ; Step 2: Install MongoDB from bundled installer
+  DetailPrint "Installing MongoDB from bundled installer..."
 
-  ${If} $0 != 0
-    DetailPrint "ERROR: Failed to download MongoDB installer"
-    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Failed to download MongoDB installer.$\r$\n$\r$\nThe application requires MongoDB to function.$\r$\n$\r$\nClick OK to continue without MongoDB (you'll need to install it manually later),$\r$\nor Cancel to abort the installation." IDOK SkipMongo
+  ${If} ${FileExists} "$INSTDIR\build\installers\mongodb-installer.msi"
+    DetailPrint "Found bundled MongoDB installer"
+
+    ; Install MongoDB silently
+    nsExec::ExecToLog 'msiexec.exe /i "$INSTDIR\build\installers\mongodb-installer.msi" /qn ADDLOCAL=ServerService,Client SHOULD_INSTALL_COMPASS=0 /l*v "$INSTDIR\mongodb-install.log"'
+    Pop $0
+
+    ${If} $0 != 0
+      DetailPrint "WARNING: MongoDB installation returned code $0"
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "MongoDB installation completed with warnings (code $0).$\r$\n$\r$\nThe application may not work correctly.$\r$\n$\r$\nClick OK to continue anyway, or Cancel to abort." IDOK ContinueAfterWarning
+      Abort "Installation cancelled"
+
+      ContinueAfterWarning:
+    ${Else}
+      DetailPrint "MongoDB installed successfully"
+    ${EndIf}
+  ${Else}
+    DetailPrint "ERROR: Bundled MongoDB installer not found!"
+    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "MongoDB installer not found in package.$\r$\n$\r$\nThe application requires MongoDB to function.$\r$\n$\r$\nClick OK to continue without MongoDB (you'll need to install it manually later),$\r$\nor Cancel to abort the installation." IDOK SkipMongo
     Abort "Installation cancelled"
 
     SkipMongo:
     Goto CreateEnv
   ${EndIf}
-
-  ; Step 3: Install MongoDB
-  DetailPrint "Installing MongoDB..."
-  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "msiexec.exe /i \"$$env:TEMP\mongodb-installer.msi\" /qn ADDLOCAL=ServerService,Client SHOULD_INSTALL_COMPASS=0 /l*v \"$INSTDIR\mongodb-install.log\""'
-  Pop $0
-
-  ${If} $0 != 0
-    DetailPrint "WARNING: MongoDB installation returned code $0"
-  ${Else}
-    DetailPrint "MongoDB installed successfully"
-  ${EndIf}
-
-  ; Clean up installer
-  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item \"$$env:TEMP\mongodb-installer.msi\" -ErrorAction SilentlyContinue"'
 
   ; Wait for service to register
   Sleep 3000

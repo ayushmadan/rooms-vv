@@ -1,6 +1,8 @@
 node_modules
 dist
 .env
+build/installers/*
+!build/installers/.gitkeep
 app/backend/uploads/*
 app/backend/output/bills/*
 app/backend/output/backups/*

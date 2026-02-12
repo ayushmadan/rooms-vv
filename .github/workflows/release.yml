@@ -53,6 +53,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download prerequisites (MongoDB)
+        shell: pwsh
+        run: |
+          echo "=== Downloading MongoDB installer to bundle ==="
+          npm run download:prerequisites
+          echo ""
+          echo "Verifying downloaded files:"
+          if (Test-Path build/installers/mongodb-installer.msi) {
+            $size = (Get-Item build/installers/mongodb-installer.msi).Length / 1MB
+            echo "✓ MongoDB installer downloaded ($([math]::Round($size, 2)) MB)"
+          } else {
+            echo "✗ ERROR: MongoDB installer not found!"
+            exit 1
+          }
+
       - name: Verify setup
         shell: pwsh
         run: |
@@ -123,17 +138,16 @@ jobs:
 
             ### Download and Install
 
-            1. Download the installer below (.exe file)
+            1. Download the installer below (.exe file - approximately 500 MB)
             2. Run the installer (requires administrator privileges)
             3. The installer will automatically:
-               - Download and install MongoDB if not already present (requires internet connection)
+               - Install MongoDB (bundled - no internet required during installation)
                - Configure MongoDB to start on system startup
                - Set up the application
                - Create desktop and start menu shortcuts
-            4. Installation takes 5-10 minutes depending on internet speed
+            4. Installation takes 2-5 minutes depending on your hardware
 
-            **Note:** If the automatic MongoDB download fails during installation, you can manually download and install MongoDB from:
-            [MongoDB 8.0.4 for Windows](https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4-signed.msi) or [Latest MongoDB Community Server](https://www.mongodb.com/try/download/community)
+            **Note:** The installer is larger because it includes MongoDB (~300 MB) bundled within it. This ensures installation works offline and is more reliable than downloading during installation.
 
             ### Features
 
