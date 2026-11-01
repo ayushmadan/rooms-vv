@@ -1,56 +1,23 @@
-const app = require('./app');
-const { port } = require('./config/env');
-const { connectDb } = require('./config/db');
-const { scheduleBackups } = require('./services/backup.service');
-const { ensureMongoRunning } = require('../../../scripts/start-mongo');
+// Standalone entry for development in a browser: `npm start`.
+const path = require('path');
+const { createServer } = require('./server');
+const logger = require('./lib/logger');
+const { version } = require('../../../package.json');
 
-async function start() {
-  await ensureMongoRunning();
-  await connectDb();
-  scheduleBackups();
+const DEFAULT_PORT = 4000;
 
-  const server = app.listen(port, () => {
-    console.log(`Vira Villas Rooms server listening on http://localhost:${port}`);
-  });
+async function main() {
+  const dataDir = path.resolve(process.env.ROOMS_DATA_DIR || '.data');
+  const server = createServer({ dataDir, appVersion: version });
+  const { url } = await server.listen({ port: Number(process.env.PORT || DEFAULT_PORT) });
+  logger.info('Rooms server ready', { url, dataDir });
 
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`\n❌ Port ${port} is already in use.`);
-      console.error('Another instance of the application may be running.');
-      console.error('\nTo fix this:');
-      console.error('  1. Close all Electron windows');
-      console.error('  2. Kill the process: npx kill-port 4000');
-      console.error('  3. Restart the application\n');
-      process.exit(1);
-    } else {
-      console.error('Server error:', err.message);
-      process.exit(1);
-    }
-  });
-
-  // Graceful shutdown handlers
-  const gracefulShutdown = (signal) => {
-    console.log(`\n${signal} received. Closing server gracefully...`);
-    server.close(() => {
-      console.log('Server closed. Exiting process.');
-      process.exit(0);
-    });
-
-    // Force exit if graceful shutdown takes too long
-    setTimeout(() => {
-      console.error('Forced shutdown due to timeout');
-      process.exit(1);
-    }, 10000);
-  };
-
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-  process.on('exit', () => {
-    console.log('Backend process exiting...');
-  });
+  const shutdown = () => server.close().then(() => process.exit(0));
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
-start().catch((e) => {
-  console.error('Failed to start application:', e.message);
+main().catch((err) => {
+  logger.error('Failed to start', { error: err.stack || err.message });
   process.exit(1);
 });

@@ -1,155 +1,144 @@
-# Vira Villas Rooms (Offline-First)
+# Vira Villas Rooms
 
-Desktop-ready room allocation system with Windows MSI packaging, local MongoDB, modern tile UI, structured billing PDFs, and scheduled/manual backups.
+Front desk, restaurant and billing for Vira Villas. Runs entirely on one Windows PC with no internet
+connection and no database to install.
 
-## 🚀 Quick Install (Windows)
+## Install (Windows 10/11, 64-bit)
 
-**[📥 Download Latest Version (MSI Installer)](https://github.com/ayushmadan/rooms-vv/releases/latest)**
+1. Run `Vira-Villas-Rooms-Setup-<version>.exe`. No administrator rights are needed.
+2. On first launch choose one of:
+   - **Start fresh** — property details, GST rates, meal rates and an admin PIN.
+   - **Move from another computer** — open a `.vvdata` file exported from *Backup & transfer*.
+   - **Bring data from the old version (1.x)** — see [Moving from version 1.x](#moving-from-version-1x).
 
-### Installation Steps
+Installing a newer version over an older 2.x version keeps all data. Uninstalling keeps the data too.
 
-1. Download the `.msi` file from the link above
-2. Run the installer (requires administrator privileges)
-3. The installer will automatically:
-   - ✅ Install MongoDB if not already present
-   - ✅ Configure MongoDB to start on system startup
-   - ✅ Set up the application to launch at startup
-   - ✅ Create desktop and start menu shortcuts
-   - ✅ Initialize with default configuration
+## What it does
 
-### System Requirements
+| Area | |
+|---|---|
+| Today | Arrivals, departures, in-house guests, collections and a board of every room's state |
+| Reservations | Room × date chart; click an empty square to book; searchable booking list |
+| Bookings | Multi-room bookings, meal plans by day, agreed rates, discounts, advance payments |
+| Check-in | Identity confirmation, photo ID upload, declaration, accompanying guests, Form C fields |
+| Folio | Room, meals, extras and restaurant charges; payments, refunds; GST split by category |
+| Check-out | Collect balance, early departure, invoice with sequential GST number |
+| Restaurant | Tables, takeaway, room service, KOT printing, split payment, post to room bill |
+| Housekeeping | Rooms turn "needs cleaning" at check-out; out-of-order with reason |
+| Expenses | Daily spends; cash expenses reduce cash-in-hand on the day sheet |
+| Reports | Day sheet, guest register, accounts, invoices; CSV export for Excel |
 
-- Windows 10/11 (64-bit)
-- 4GB RAM minimum
-- 500MB free disk space
-- Internet connection for updates and Google Drive sync
+Everything printable opens in a print window with **Print** and **Save as PDF**: registration card
+and declaration, tax invoice, folio, KOT and restaurant bill (80 mm), day sheet, guest register.
 
-### First Launch
+Actions that change money or records after the fact (refunds, voids, rate and tax settings, reports,
+data import) need the admin PIN. Every change is written to the activity log with the staff name.
 
-After installation, launch the application from the Start Menu or Desktop shortcut. On first run:
-1. The application will verify MongoDB is running
-2. Default admin PIN is `1234` (change this in Settings)
-3. Click "Initialize Inventory" to set up the default room layout
-4. You're ready to start managing bookings!
+## Data, backups and moving computers
 
----
+- All data — bookings, guests, ID photos, bills, menu, settings — is one SQLite file:
+  `%APPDATA%\Vira Villas Rooms\data\rooms.db`.
+- A backup is saved daily in `data\backups` and kept for 30 days (configurable). Set
+  *Also copy to folder* in **Backup & transfer** to mirror it to a pen drive, second disk or a
+  OneDrive/Google Drive folder.
+- **Export data file** writes one `.vvdata` file. On the other computer use **Import data file**
+  (or *Move from another computer* in first-time setup). Importing saves a safety backup of the
+  current data first, and the admin PIN travels with the file.
 
-## Inventory layout
+## Activating a computer (copy protection)
 
-- First floor: `Room 101, 102` (BIG), `Room 103, 104` (SMALL)
-- Second floor: `Room 201, 202` (BIG), `Room 203, 204` (SMALL)
-- Facilities: `Party Hall` and `Complete Dining Hall`
-
-## Pricing defaults
-
-- SMALL room: `Rs 1800 / night`
-- BIG room: `Rs 2200 / night`
-- Party Hall: `Rs 5000 / night`
-- Complete Dining Hall: `Rs 20000 / night`
-- Meal add-ons: `Rs 250` each (breakfast/lunch/dinner) per day
-- GST component: default `10%` (inclusive model; totals remain as configured amounts)
-
-## Key features
-
-1. Customer onboarding with photo ID upload.
-2. Date-based availability with floor/hall radio filters and tile selection.
-3. Multi-room booking in one action under a single customer profile.
-4. Booked-tile click shows overlapping bookings in selected date range.
-5. Copy/Paste customer details across bookings to speed repeated entries.
-6. Check-in requires customer detail confirmation prompt.
-7. After check-in, customer profile edits are admin-only.
-8. Booking quote in IST with default rent prefill and booking-time rent override.
-9. Move/reschedule bookings to different room/hall and date range.
-10. Cancel booking and room lifecycle status updates (check-in, check-out, cleaned).
-11. Payment tracking with mode (UPI/Cash/Credit Card/Debit Card), advance collection, settlement, and bill-paid marker.
-12. Admin unlock via PIN for pricing config, GST config, ledger reports, and past-customer edits.
-13. Bill and declaration PDFs with brand header, line-item table, GST-inclusive split, and legal declarations.
-14. IST-aligned booking windows (12:00 PM check-in, 11:00 AM check-out).
-15. Scheduled backup CSV at 11:00 and 23:00 IST.
-16. Manual backup export for custom date range.
-17. Manual Google Drive upload for selected local backup files.
-
-## Booking reference format
-
-- New bookings are generated as: `VV-YYMMDD-####`
-- Example: `VV-260211-0007`
-- All booking actions accept this readable code (and also old Mongo IDs for backward compatibility).
-
-## Run locally
+The installer can be copied, but a copied install stays locked. On first launch each computer
+shows a **machine code** (e.g. `7KQM-3XWD-P9HT-2RVA`). Only the owner can turn it into an
+activation key, with the private key on the owner's own computer:
 
 ```bash
-cp .env.example .env
+node scripts/license.js issue 7KQM-3XWD-P9HT-2RVA
+```
+
+Send the printed key to the front desk; they paste it into the activation screen (no internet
+needed). A key only works on the computer whose code it was made for.
+
+The private key is in `~/.vira-villas-rooms/license-private.pem`. **Back it up** (e.g. on a pen drive
+kept with you). If it is lost, run `node scripts/license.js keygen` on a new machine, ship an
+update, and re-activate every computer. Never commit it to git.
+
+## Guest ID privacy
+
+- Front-desk staff record ID numbers and photos but only ever see them masked (`XXXX XXXX 1123`).
+- Viewing a full ID number or photo, printing the guest register, and exporting guest data need
+  the admin PIN.
+- ID numbers and photos are **encrypted inside the data file** with a key protected by the admin PIN,
+  so a copied database or backup reveals nothing without the PIN. The PIN cannot be recovered —
+  keep it safe.
+
+## Photographing IDs with a phone
+
+At check-in (or on a guest's page) press **Use phone**. A QR code appears; scan it with any phone
+on the same Wi-Fi as the front-desk PC, photograph the front and the back of the ID, and both
+photos appear on that guest — encrypted, like every ID photo. No internet or app install is needed.
+
+- The link works for 10 minutes and only for that guest; it stops working when the dialog closes.
+- While a link is open the PC listens on port 47810 for the phone. That listener serves only the
+  capture page, never guest data; the rest of the app stays private to the PC.
+- The first time, Windows Firewall asks whether to allow network access: tick **Private networks**
+  and allow (an administrator password may be needed once). Hotel guest Wi-Fi that isolates devices
+  from each other will block this — use the staff network.
+
+## Updates
+
+**Check for updates** in the sidebar compares the app with the version in `package.json` on the
+`main` branch (GitHub redirects the old `master` name there). To ship a fix:
+
+1. Bump `version` in `package.json` and push to `main`.
+2. GitHub Actions tests, builds and publishes release `vX.Y.Z` with the installer (about 10 minutes).
+3. On the hotel PC, *Check for updates* → *Install update* (admin PIN). It backs up, downloads,
+   verifies the checksum, installs silently and reopens.
+
+## Emailing the day report
+
+Set the address under **Settings → Daily report email**. *Email report* on Today or Reports opens
+Gmail in the browser (where you are signed in) with the recipient, subject and report filled in —
+press Send.
+
+## Moving from version 1.x
+
+On the old computer open MongoDB Compass, connect to `localhost:27017`, open the `roomsvv`
+database and export each collection as JSON: `rooms`, `customers`, `bookings`, `settings`,
+`rateconfigs`, `mealrateconfigs`. In the new version choose all the JSON files under
+*Bring data from the old version*. The import runs only on an empty system.
+
+Guest ID photos are picked up from the old app's upload folder, so install 2.0 and run the import
+**on the same computer** the old version used. After that, use *Export data file* to move
+everything — photos included — to another computer.
+
+## Development
+
+Requires Node.js 24+.
+
+```bash
 npm install
-npm run dev
+npm start            # desktop app (Electron)
+npm run serve        # same app in a browser at http://127.0.0.1:4000, data in ./.data
+npm test             # unit + API tests
+npm run dist:win     # Windows installer in dist/ (builds on macOS, Linux or Windows)
 ```
 
-## Build MSI (on Windows)
+Layout:
 
-```bash
-npm run build:msi
+```
+electron/            desktop shell (window, print-to-PDF, preload bridge)
+app/backend/src/
+  db/                schema migrations and the SQLite store
+  services/          bookings, folio, invoices, restaurant, reports, backup, print documents
+  routes/            thin HTTP handlers
+  lib/               money (paise), dates, validation, HTML escaping
+app/frontend/        no-build ES modules; css/app.css holds the design tokens
+test/                node:test suites
 ```
 
-MSI output is generated in `dist/`.
+Schema changes go in `app/backend/src/db/schema.js` as a new migration; never edit a shipped one.
 
-## Auto-Update System
+## Releasing
 
-The application includes built-in update checking and installation:
-
-### In-App Updates
-
-1. **Check for Updates**: Click "Check Update" in the header
-   - Compares local version with latest GitHub release
-   - Shows available version if update exists
-
-2. **Install Updates**: Click "Update & Restart"
-   - Automatically downloads and installs latest version
-   - Restarts the application after update completes
-
-### Creating New Releases
-
-The repository has **automated release hooks** that make version bumping easy:
-
-#### Using Git Hooks (Recommended)
-
-1. **Make your changes** and stage them (`git add .`)
-2. **Commit normally** (`git commit -m "message"`)
-   - A dialog/prompt will ask if you want to create a release
-   - Choose **No** for normal commits
-   - Choose **Yes** for releases, then select version type (Patch/Minor/Major)
-3. **Push** (`git push`)
-   - The commit AND tag are pushed automatically
-   - GitHub Actions builds the MSI and creates the release
-
-See [Git Hooks Guide](scripts/GIT-HOOKS-GUIDE.md) for detailed workflow.
-
-#### Manual Release (Alternative)
-
-1. **Update Version**: Edit `package.json` version (e.g., `0.2.0`)
-2. **Create Git Tag**:
-   ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
-3. **GitHub Actions**: Automatically builds MSI and creates release
-4. **Users Notified**: Installed apps will detect the new version
-
-### Manual Build (Development)
-
-```bash
-# Build MSI locally
-npm run build:msi
-
-# Build with auto-fetch from GitHub
-npm run build:msi:pipeline
-
-# Manual update (without MSI)
-npm run update:win
-
-# Ensure MongoDB is running
-npm run mongo:ensure:win
-```
-
-## Default Admin PIN
-
-- If `.env` is missing, default `ADMIN_PIN=1234`.
-- For production, set your own pin in `.env`.
+Push a tag `vX.Y.Z`. GitHub Actions runs the tests, builds the installer and attaches it to a
+release. See [scripts/GIT-HOOKS-GUIDE.md](scripts/GIT-HOOKS-GUIDE.md).

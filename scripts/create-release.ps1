@@ -59,10 +59,10 @@ git commit -m "chore: bump version to $Version"
 
 # Optional: Build locally before tagging
 if (-not $SkipBuild) {
-  Write-Output "`n[4/6] Building MSI locally (this may take a few minutes)..."
-  npm run build:msi
+  Write-Output "`n[4/6] Building Windows installer locally (this may take a few minutes)..."
+  npm run dist:win
 
-  Write-Output "Build complete. Please test the MSI from the dist/ folder."
+  Write-Output "Build complete. Please test the installer from the dist/ folder."
   Write-Output "Press Enter to continue with tagging and pushing..."
   $null = Read-Host
 } else {

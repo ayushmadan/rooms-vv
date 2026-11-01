@@ -1,45 +1,31 @@
 {
   "name": "rooms-vv",
-  "version": "1.2.2",
-  "description": "Offline-first room allocation desktop app",
+  "productName": "Vira Villas Rooms",
+  "version": "3.0.0",
+  "description": "Offline front desk, restaurant and billing for Vira Villas",
   "author": "Ayush Madan",
+  "license": "UNLICENSED",
+  "private": true,
   "main": "electron/main.js",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:electron\"",
-    "dev:backend": "nodemon app/backend/src/index.js",
-    "dev:electron": "wait-on tcp:4000 && electron .",
-    "start": "node app/backend/src/index.js",
-    "build:msi": "electron-builder --win nsis",
-    "build:win": "electron-builder --win nsis",
-    "build:nsis": "electron-builder --win nsis",
-    "build:msi:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/windows/build-msi.ps1",
-    "download:prerequisites": "powershell -ExecutionPolicy Bypass -File scripts/windows/download-prerequisites.ps1",
-    "update:win": "powershell -ExecutionPolicy Bypass -File scripts/windows/update-app.ps1",
-    "mongo:ensure:win": "powershell -ExecutionPolicy Bypass -File scripts/windows/ensure-mongo.ps1 -InstallIfMissing",
-    "build:mac": "electron-builder --mac",
-    "backup:run": "node app/backend/src/services/backup.service.js"
+    "start": "electron .",
+    "serve": "node app/backend/src/index.js",
+    "test": "node --test --test-reporter=spec \"test/*.test.js\"",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac"
   },
   "build": {
     "extends": "./electron-builder.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "csv-writer": "^1.6.0",
-    "date-fns": "^4.1.0",
-    "dotenv": "^16.4.7",
-    "electron-is-dev": "^3.0.1",
-    "express": "^4.21.2",
-    "googleapis": "^144.0.0",
-    "mongoose": "^8.10.1",
-    "multer": "^1.4.5-lts.1",
-    "node-cron": "^3.0.3",
-    "pdfkit": "^0.17.1"
+    "express": "^4.22.3",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "electron": "^34.0.2",
-    "electron-builder": "^25.1.8",
-    "nodemon": "^3.1.9",
-    "wait-on": "^8.0.2"
+    "electron": "45.2.1",
+    "electron-builder": "^26.0.0"
   }
 }

@@ -9,3 +9,5 @@ app/backend/output/backups/*
 !app/backend/uploads/.gitkeep
 !app/backend/output/bills/.gitkeep
 !app/backend/output/backups/.gitkeep
+.data
+license.json
