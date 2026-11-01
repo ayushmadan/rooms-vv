@@ -2,7 +2,7 @@
 // number; viewing the photo or full number asks for the admin PIN.
 import { h, clear, append } from './dom.js';
 import { api, admin } from './api.js';
-import { toast, showError, compressImage, captureFromCamera, idPhotoUrl, formDialog } from './ui.js';
+import { toast, showError, compressImage, captureFromCamera, idPhotoUrl, formDialog, openPrint } from './ui.js';
 
 const POLL_MS = 2000;
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -103,13 +103,31 @@ function pickFile() {
 export function idPhotoBlock(guest, { canChange = true, onChanged } = {}) {
   const view = h('div');
   const sides = [['front', guest.hasIdPhoto], ['back', guest.hasIdPhotoBack]].filter(([, has]) => has).map(([side]) => side);
+  // Object URLs live while the photos are on screen and are released when the page changes.
+  let urls = [];
+  const release = () => {
+    urls.forEach((url) => URL.revokeObjectURL(url));
+    urls = [];
+  };
+  window.addEventListener('hashchange', release, { once: true });
+  // Full size opens through the app with a short-lived admin ticket, so it also works in the
+  // desktop app (which refuses blob: windows) and never leaves a reusable link behind.
+  const openFullSize = (side) => openPrint(`/api/guests/${guest.id}/photo?side=${side}`).catch(showError);
   const show = async () => {
     try {
-      const urls = await Promise.all(sides.map((side) => idPhotoUrl(guest.id, side)));
-      append(clear(view), h('div', { class: 'stack', style: { gap: '8px' } }, urls.map((url, i) => h('img', {
-        class: 'idphoto', src: url, alt: `${sides[i] === 'front' ? 'Front' : 'Back'} of photo ID of ${guest.fullName}`,
-        onload: () => setTimeout(() => URL.revokeObjectURL(url), 1000)
-      }))));
+      release();
+      urls = await Promise.all(sides.map((side) => idPhotoUrl(guest.id, side)));
+      append(clear(view), h('div', { class: 'stack', style: { gap: '10px' } }, urls.map((url, i) => {
+        const label = sides[i] === 'front' ? 'Front' : 'Back';
+        return h('figure', { style: { margin: 0 } },
+          h('img', {
+            class: 'idphoto', src: url, alt: `${label} of photo ID of ${guest.fullName}`, title: 'Open full size',
+            style: { cursor: 'zoom-in' }, onclick: () => openFullSize(sides[i])
+          }),
+          h('figcaption', { class: 'row', style: { justifyContent: 'space-between', marginTop: '4px' } },
+            h('span', { class: 'hint' }, `${label} of ID`),
+            h('button', { class: 'quiet small', onclick: () => openFullSize(sides[i]) }, 'Open full size')));
+      })));
     } catch (err) {
       showError(err);
     }

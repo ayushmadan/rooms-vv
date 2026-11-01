@@ -71,6 +71,7 @@ async function send(method, path, { body, raw, retryAsAdmin = true } = {}) {
     init.body = JSON.stringify(body);
     init.headers['content-type'] = 'application/json';
   }
+  const sentToken = adminToken;
   let res;
   try {
     res = await fetch(path, init);
@@ -83,10 +84,21 @@ async function send(method, path, { body, raw, retryAsAdmin = true } = {}) {
 
   const message = (data && data.message) || `Request failed (${res.status})`;
   if (res.status === 403 && /admin/i.test(message) && retryAsAdmin && onAdminRequired) {
-    if (adminToken) admin.setToken('');
-    if (await onAdminRequired()) return send(method, path, { body, raw, retryAsAdmin: false });
+    const retry = () => send(method, path, { body, raw, retryAsAdmin: false });
+    // Unlocked by another request while this one was in flight: just retry.
+    if (adminToken && adminToken !== sentToken) return retry();
+    // Only a token this request actually used can be the expired one.
+    if (sentToken && sentToken === adminToken) admin.setToken('');
+    if (await requestAdmin()) return retry();
   }
   throw new ApiError(res.status, message);
+}
+
+// Requests that need admin at the same moment share one PIN prompt.
+let pendingUnlock = null;
+function requestAdmin() {
+  if (!pendingUnlock) pendingUnlock = Promise.resolve(onAdminRequired()).finally(() => { pendingUnlock = null; });
+  return pendingUnlock;
 }
 
 export const api = {

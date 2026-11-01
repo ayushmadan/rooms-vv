@@ -10,6 +10,7 @@ const folio = require('../services/folio');
 const expenses = require('../services/expenses');
 const audit = require('../services/audit');
 const vault = require('../services/vault');
+const documents = require('../services/documents');
 
 module.exports = function coreRoutes({ store, auth, license, appVersion }) {
   const router = express.Router();
@@ -102,6 +103,31 @@ module.exports = function coreRoutes({ store, auth, license, appVersion }) {
   router.post('/rates', requireAdmin, handle((req, res) => res.json(units.setRateOverride(req.ctx, req.body))));
   router.get('/meal-rates', handle((req, res) => res.json(units.listMealOverrides(store, { from: v.ymd(req.query.from, 'From'), to: v.ymd(req.query.to, 'To') }))));
   router.post('/meal-rates', requireAdmin, handle((req, res) => res.json(units.setMealOverride(req.ctx, req.body))));
+
+  // --- Printed documents: wording and layout options over the built-in designs
+  router.get('/documents', requireAdmin, handle((_req, res) => res.json(documents.describe(store))));
+  // The most recent real records, so the preview shows each document with live data.
+  router.get('/documents/samples', requireAdmin, handle((req, res) => {
+    const latest = (sql) => store.get(sql)?.id ?? null;
+    res.json({
+      booking: latest("SELECT id FROM bookings WHERE status <> 'CANCELLED' ORDER BY (checked_in_at IS NOT NULL) DESC, id DESC LIMIT 1"),
+      invoice: latest("SELECT id FROM invoices WHERE booking_id IS NOT NULL ORDER BY id DESC LIMIT 1"),
+      orderInvoice: latest("SELECT id FROM invoices WHERE order_id IS NOT NULL ORDER BY id DESC LIMIT 1"),
+      payment: latest('SELECT id FROM payments WHERE voided_at IS NULL ORDER BY id DESC LIMIT 1'),
+      kot: store.get('SELECT order_id AS orderId, kot_no AS kotNo FROM order_items WHERE kot_no IS NOT NULL ORDER BY id DESC LIMIT 1') || null,
+      today: req.ctx.today()
+    });
+  }));
+  router.put('/documents/:type', requireAdmin, handle((req, res) => {
+    const saved = documents.save(store, req.params.type, req.body || {});
+    audit.record(req.ctx, 'documents.update', 'settings', null, req.params.type);
+    res.json(saved);
+  }));
+  router.delete('/documents/:type', requireAdmin, handle((req, res) => {
+    const saved = documents.reset(store, req.params.type);
+    audit.record(req.ctx, 'documents.reset', 'settings', null, req.params.type);
+    res.json(saved);
+  }));
 
   router.get('/audit', requireAdmin, handle((_req, res) => res.json(audit.recent(store))));
 

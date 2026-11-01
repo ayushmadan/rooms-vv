@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Guest ID numbers and photos encrypted at rest, masked for staff, viewable with the admin PIN.
 - ID capture from the PC camera at check-in, or from any phone on the hotel Wi-Fi by scanning a QR code
   (front and back sides, encrypted, one-time 10-minute links).
+- Documents & printing: admin wording, section and colour options for every printout with live preview;
+  unchanged fields follow the built-in designs, so updates reach every install automatically.
 - Machine activation: copied installs stay locked until the owner issues a key.
 - Check for updates: installs new versions published from the main branch.
 - Email report: opens Gmail compose with the day report filled in.

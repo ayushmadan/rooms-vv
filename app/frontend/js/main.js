@@ -14,6 +14,7 @@ const ROUTES = [
   { path: 'expenses', label: 'Expenses', group: 'Operations', load: () => import('./views/expenses.js') },
   { path: 'reports', label: 'Reports', group: 'Back office', load: () => import('./views/reports.js') },
   { path: 'menu', label: 'Prices & catalogue', group: 'Back office', load: () => import('./views/menu.js') },
+  { path: 'documents', label: 'Documents & printing', group: 'Back office', load: () => import('./views/documents.js') },
   { path: 'settings', label: 'Settings', group: 'Back office', load: () => import('./views/settings.js') },
   { path: 'data', label: 'Backup & transfer', group: 'Back office', load: () => import('./views/data.js') },
   // Not in the navigation:

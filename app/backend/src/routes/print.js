@@ -6,7 +6,12 @@ const { requireAdmin } = require('./guard');
 
 module.exports = function printRoutes({ store }) {
   const router = express.Router();
-  const send = (res, doc) => res.type('html').set('Cache-Control', 'no-store').send(doc);
+  // Print pages may be framed by the app itself (live preview in Documents settings), nobody else.
+  const send = (res, doc) => res.type('html').set({
+    'Cache-Control': 'no-store',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
+  }).send(doc);
 
   router.get('/declaration/:bookingId', handle((req, res) => send(res, print.declaration(store, v.id(req.params.bookingId), {
     showIdPhoto: req.ctx.isAdmin, ticket: String(req.query.ticket || '').replace(/[^a-f0-9]/g, '')

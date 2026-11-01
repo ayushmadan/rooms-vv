@@ -20,7 +20,7 @@ export async function render(page) {
     pageHead('Settings', {
       eyebrow: 'Back office',
       lede: 'Property details and wording printed on invoices, receipts and registration cards. Prices are under Prices & catalogue.',
-      actions: [h('a', { class: 'button', href: '#/menu' }, 'Prices & catalogue')]
+      actions: [h('a', { class: 'button', href: '#/documents' }, 'Documents & printing'), h('a', { class: 'button', href: '#/menu' }, 'Prices & catalogue')]
     }),
     h('div', { class: 'columns two' },
       h('div', {}, propertyForm(all.property), taxesForm(all.taxes)),

@@ -441,3 +441,45 @@ test('phone capture: QR session uploads both sides, encrypted, then the link die
     await stop();
   }
 });
+
+test('documents: admin wording overrides sit on top of built-in designs that updates can change', async () => {
+  const { api, server, stop } = await startApp();
+  const documents = require('../app/backend/src/services/documents');
+  const builtInTitle = documents.DOCUMENTS.invoice.fields.title.default;
+  try {
+    const id = (await book(api, '101')).data.bookings[0].id;
+    await api.post(`/api/bookings/${id}/payments`, { amount: 4400, mode: 'UPI' });
+    assert.equal((await api.put('/api/documents/invoice', { title: 'Bill' })).status, 403, 'staff cannot change templates');
+    await api.unlock();
+
+    const saved = await api.put('/api/documents/invoice', {
+      ...documents.get(server.store, 'invoice'), signatorySign: '<b>Manager</b>', showTaxSummary: false
+    }, { admin: true });
+    assert.equal(saved.status, 200, JSON.stringify(saved.data));
+    const stored = JSON.parse(server.store.get("SELECT value FROM settings WHERE key = 'documents'").value);
+    assert.deepEqual(Object.keys(stored.invoice).sort(), ['showTaxSummary', 'signatorySign'], 'only changes are stored');
+
+    // An update ships a new default title: untouched fields follow it, the admin's edits stay.
+    documents.DOCUMENTS.invoice.fields.title.default = 'GST Tax Invoice';
+    const { invoiceId } = (await api.post(`/api/bookings/${id}/invoice`, {})).data;
+    const page = (await api.get(`/print/invoice/${invoiceId}`)).data;
+    assert.match(page, /GST Tax Invoice/);
+    assert.match(page, /&lt;b&gt;Manager&lt;\/b&gt;/, 'admin text is escaped');
+    assert.doesNotMatch(page, /GST summary/, 'section hidden by admin');
+
+    assert.equal((await api.put('/api/documents/general', { accent: 'red;}</style><script>', headingStyle: 'serif', showLogo: true, showTagline: true, thermalWidth: '80' }, { admin: true })).status, 400);
+    await api.put('/api/documents/general', { accent: '#2F5F8F', headingStyle: 'sans', showLogo: false, showTagline: true, thermalWidth: '58' }, { admin: true });
+    const themed = await api.get(`/print/invoice/${invoiceId}`);
+    assert.match(themed.data, /--accent: #2f5f8f/);
+    assert.doesNotMatch(themed.data, /assets\/logo\.png/);
+    assert.equal(themed.headers.get('x-frame-options'), 'SAMEORIGIN');
+
+    await api.raw('DELETE', '/api/documents/invoice', { admin: true });
+    assert.match((await api.get(`/print/invoice/${invoiceId}`)).data, /GST summary/, 'reset restores defaults');
+    const listed = (await api.get('/api/documents', { admin: true })).data;
+    assert.deepEqual(listed.find((d) => d.type === 'general').customised.sort(), ['accent', 'headingStyle', 'showLogo', 'thermalWidth']);
+  } finally {
+    documents.DOCUMENTS.invoice.fields.title.default = builtInTitle;
+    await stop();
+  }
+});

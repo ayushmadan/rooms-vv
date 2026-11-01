@@ -71,6 +71,18 @@ update, and re-activate every computer. Never commit it to git.
   so a copied database or backup reveals nothing without the PIN. The PIN cannot be recovered —
   keep it safe.
 
+## Printed documents
+
+**Back office → Documents & printing** lets the admin adjust every printout — registration card and
+declaration, tax invoice, folio, booking confirmation, receipt, restaurant receipt, KOT, day sheet
+and guest register: titles, opening lines, notes, signature labels, which sections appear, accent
+colour, heading style, logo and 58/80 mm receipt paper, with a live preview from real data.
+
+Only the fields you change are saved. Everything else follows the built-in design, so when an
+update improves a document it applies automatically while your own wording stays. *Reset to
+default* returns a document to the built-in version. Declaration clauses, invoice terms, bank/UPI
+details and booking terms are under **Settings**.
+
 ## Photographing IDs with a phone
 
 At check-in (or on a guest's page) press **Use phone**. A QR code appears; scan it with any phone
