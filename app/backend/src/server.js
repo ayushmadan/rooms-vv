@@ -7,9 +7,11 @@ const { ymdInZone } = require('./lib/dates');
 const { createAuth } = require('./services/auth');
 const { createLicense } = require('./services/license');
 const { createPhoneCapture } = require('./services/phone-capture');
+const { createOwner } = require('./services/owner');
+const { createIdAccess } = require('./services/id-access');
+const { createSync } = require('./sync');
 const backupService = require('./services/backup');
 const settings = require('./services/settings');
-const vault = require('./services/vault');
 const logger = require('./lib/logger');
 
 const FRONTEND_DIR = path.join(__dirname, '..', '..', 'frontend');
@@ -27,31 +29,51 @@ const SECURITY_HEADERS = {
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 };
 
+// Reachable before activation: enough to show the activation screen, activate, or re-check.
+// A desk locked for an overdue check may recover by syncing with the admin PC.
+const UNLICENSED_ALLOWED = new Set(['/api/health', '/api/bootstrap', '/api/license/activate', '/api/license/check', '/api/sync/run']);
+
 /**
  * Builds the app around a data directory. Nothing listens until listen() is called,
  * which lets Electron, the CLI and tests share one setup.
- */
-// Reachable before activation: enough to show the activation screen and activate.
-const UNLICENSED_ALLOWED = new Set(['/api/health', '/api/bootstrap', '/api/license/activate']);
-
-/**
  * @param {object} options
  * @param {{ required: boolean, machineId: string }} [options.license] activation (enforced by the packaged app)
  * @param {{ host?: string, port?: number }} [options.phoneCapture] network listener for phone ID capture
+ * @param {{ host?: string, port?: number, discoveryPort?: number|null }} [options.sync] hotel-network sync listener
+ * @param {typeof fetch} [options.fetchImpl] used for GitHub licence checks (tests inject one)
+ * @param {string} [options.publicKeyPem] owner public key (defaults to the one built into the app)
  */
 function createServer({
   dataDir, appVersion = '0.0.0', clock = () => new Date(),
   license: licenseOptions = { required: false, machineId: 'dev' },
-  phoneCapture: phoneCaptureOptions = {}
+  phoneCapture: phoneCaptureOptions = {},
+  sync: syncOptions = {},
+  fetchImpl = fetch,
+  publicKeyPem
 }) {
   fs.mkdirSync(path.join(dataDir, 'tmp'), { recursive: true });
   const store = new Store(path.join(dataDir, 'rooms.db'));
-  const auth = createAuth({ store, clock: () => clock().getTime() });
   const backup = backupService.createService({ dataDir });
-  const license = createLicense({ ...licenseOptions, file: path.join(dataDir, '..', 'license.json') });
+  const ms = () => clock().getTime();
+  // Owner key, licence and sync state live beside the data folder: they belong to this
+  // computer, not to the hotel's data, so exports and imports never carry them.
+  const machineDir = path.join(dataDir, '..');
+  const keyOption = publicKeyPem ? { publicKeyPem } : {};
+  const owner = createOwner({ keyFile: path.join(machineDir, 'owner-key.pem'), registryFile: path.join(machineDir, 'owner-licenses.json'), clock: ms, ...keyOption });
+  const idAccess = createIdAccess({ store, owner, file: path.join(machineDir, 'vault-owner.json') });
+  idAccess.restore();
+  const auth = createAuth({ store, clock: ms, idAccess });
+  const license = createLicense({ ...licenseOptions, file: path.join(machineDir, 'license.json'), isOwner: () => owner.loaded, clock: ms, fetchImpl, ...keyOption });
   const phoneCapture = createPhoneCapture({ store, clock, ...phoneCaptureOptions });
-  const deps = { store, auth, backup, license, phoneCapture, dataDir, appVersion };
-  vault.sealPlaintext(store);
+  const systemCtx = (actor) => ({ store, appVersion, actor, isAdmin: true, now: () => clock().toISOString() });
+  const sync = createSync({
+    store, dataDir, appVersion, license, owner, clock: ms, network: syncOptions,
+    adoptSnapshot: (file) => {
+      backup.importFile(systemCtx('sync'), file);
+      auth.lockAll(); // the admin PC's data carries its own PIN and keys
+    }
+  });
+  const deps = { store, auth, idAccess, backup, license, owner, sync, phoneCapture, dataDir, appVersion };
 
   const app = express();
   app.disable('x-powered-by');
@@ -68,11 +90,14 @@ function createServer({
   app.use((req, _res, next) => {
     const now = () => clock().toISOString();
     const token = (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    const isAdmin = auth.check(token) || (req.method === 'GET' && auth.checkTicket(req.query.ticket));
     req.ctx = {
       store,
       appVersion,
       actor: String(req.get('x-staff') || 'Front desk').replace(/[^\p{L}\p{N} .'-]/gu, '').trim().slice(0, STAFF_NAME_MAX) || 'Front desk',
-      isAdmin: auth.check(token) || (req.method === 'GET' && auth.checkTicket(req.query.ticket)),
+      isAdmin,
+      // The admin PC opens ID numbers and photos without the PIN; front desks need it.
+      canSeeIds: isAdmin || idAccess.available(),
       token,
       now,
       today: () => ymdInZone(now(), settings.getSection(store, 'policy').timeZone)
@@ -88,14 +113,13 @@ function createServer({
     if (license.isActive() || !(req.path.startsWith('/api/') || req.path.startsWith('/print/')) || UNLICENSED_ALLOWED.has(req.path)) return next();
     next(new HttpError(423, 'This computer is not activated'));
   });
-  const smallJson = express.json({ limit: '1mb' });
-  const largeJson = express.json({ limit: '300mb' });
-  app.use('/api', (req, res, next) => (req.path === '/data/legacy' ? largeJson : smallJson)(req, res, next));
+  app.use('/api', express.json({ limit: '1mb' }));
 
   app.use('/api', require('./routes/core')(deps));
   app.use('/api', require('./routes/front-desk')(deps));
   app.use('/api', require('./routes/restaurant')(deps));
   app.use('/api', require('./routes/back-office')(deps));
+  app.use('/api', require('./routes/network')(deps));
   app.use('/print', require('./routes/print')(deps));
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Not found')));
   // no-cache: always revalidate, so an updated app never mixes old and new modules.
@@ -104,8 +128,10 @@ function createServer({
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, _next) => {
     const status = err instanceof HttpError ? err.status : err.type === 'entity.too.large' ? 413 : err.status === 400 ? 400 : 500;
-    if (status >= 500) logger.error('Request failed', { method: req.method, path: req.path, error: err.stack || err.message });
-    const message = status >= 500 ? 'Something went wrong. The error has been logged.' : err.message;
+    // Errors raised on purpose (HttpError) explain themselves; anything unexpected is logged, not shown.
+    const unexpected = !(err instanceof HttpError) && status >= 500;
+    if (unexpected) logger.error('Request failed', { method: req.method, path: req.path, error: err.stack || err.message });
+    const message = unexpected ? 'Something went wrong. The error has been logged.' : err.message;
     res.status(status).json({ message });
   });
 
@@ -131,6 +157,7 @@ function createServer({
         if (settings.getSection(store, 'setup').completed) setTimeout(runAutoBackup, 30_000).unref();
         backupTimer = setInterval(() => settings.getSection(store, 'setup').completed && runAutoBackup(), AUTO_BACKUP_INTERVAL_MS);
         backupTimer.unref();
+        sync.start();
         resolve({ port: actualPort, url: `http://127.0.0.1:${actualPort}` });
       });
     });
@@ -139,6 +166,7 @@ function createServer({
   function close() {
     clearInterval(backupTimer);
     phoneCapture.closeAll();
+    sync.stop();
     return new Promise((resolve) => {
       const finish = () => {
         store.close();
@@ -155,7 +183,7 @@ function createServer({
     return backup.backupNow({ store, appVersion, actor: label, now: () => clock().toISOString() });
   }
 
-  return { app, store, listen, close, runAutoBackup, backupNow, isAdminToken: (token) => auth.check(token) };
+  return { app, store, sync, owner, license, listen, close, runAutoBackup, backupNow, isAdminToken: (token) => auth.check(token) };
 }
 
 module.exports = { createServer, CSRF_HEADER };

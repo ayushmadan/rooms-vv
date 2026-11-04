@@ -9,9 +9,9 @@ connection and no database to install.
 2. On first launch choose one of:
    - **Start fresh** — property details, GST rates, meal rates and an admin PIN.
    - **Move from another computer** — open a `.vvdata` file exported from *Backup & transfer*.
-   - **Bring data from the old version (1.x)** — see [Moving from version 1.x](#moving-from-version-1x).
+   - **Join the admin PC** — for a front desk that syncs with the admin PC (see below).
 
-Installing a newer version over an older 2.x version keeps all data. Uninstalling keeps the data too.
+Installing a newer version over an older one keeps all data. Uninstalling keeps the data too.
 
 ## What it does
 
@@ -45,22 +45,65 @@ data import) need the admin PIN. Every change is written to the activity log wit
   (or *Move from another computer* in first-time setup). Importing saves a safety backup of the
   current data first, and the admin PIN travels with the file.
 
-## Activating a computer (copy protection)
+## Admin PC and front desks
 
-The installer can be copied, but a copied install stays locked. On first launch each computer
-shows a **machine code** (e.g. `7KQM-3XWD-P9HT-2RVA`). Only the owner can turn it into an
-activation key, with the private key on the owner's own computer:
+Every computer runs the same installer. **The admin PC** is the one where you load your owner key
+(*Network & licences → Make this the admin PC*, choose `license-private.pem` from your pen drive).
+It issues and removes licence keys and is the hub the front desks sync with.
 
-```bash
-node scripts/license.js issue 7KQM-3XWD-P9HT-2RVA
-```
+### Licence keys
 
-Send the printed key to the front desk; they paste it into the activation screen (no internet
-needed). A key only works on the computer whose code it was made for.
+1. A new computer shows its **machine code** on the activation screen.
+2. On the admin PC: *Network & licences → Issue key*, enter the code and a label. Send the key to
+   that computer; it is pasted on the activation screen (no internet needed).
+3. Export **licenses.json** (same screen), put it in the root of this repository and push to `main`.
 
-The private key is in `~/.vira-villas-rooms/license-private.pem`. **Back it up** (e.g. on a pen drive
-kept with you). If it is lost, run `node scripts/license.js keygen` on a new machine, ship an
-update, and re-activate every computer. Never commit it to git.
+To **stop a copy working** (e.g. someone leaves): *Remove* its key on the admin PC, export
+licenses.json again, commit and push. Desks on the hotel network lock at their next sync
+(≤ 15 minutes); desks elsewhere when they next reach GitHub (checked every 15 minutes).
+
+licenses.json holds only SHA-256 hashes of keys, signed with the owner key — it cannot be edited
+or forged, and an older list never overrides a newer one. A desk that cannot confirm its key with
+GitHub or the admin PC for **7 days** locks until it can check again. Keys issued after the last
+published list are treated as pending, so new desks work before you commit.
+
+Computers activated before version 3.1 have keys the admin PC has not seen: register each one
+(*Register earlier key*, with its machine code) **before** publishing the first licenses.json.
+
+The private key is `~/.vira-villas-rooms/license-private.pem`. **Back it up** offline. If it is lost:
+`node scripts/license.js keygen` on a new machine, ship an update, re-activate every computer.
+Never commit it.
+
+### Sync between desks (hotel network only)
+
+- On the admin PC: *Network & licences → Add a desk* shows a one-time pairing code.
+- On the desk (first-time setup → *Join the admin PC*, or *Network & licences*): pick the admin PC
+  (found automatically) or type its address, enter the code. The desk backs up its own data and
+  takes a copy of the hotel's.
+- Desks then exchange changes with the admin PC every **15 minutes** and on *Sync now* (top bar).
+  A bar across the top of the window shows a sync in progress; the chip shows the last sync time.
+- No internet is used. Traffic is encrypted per desk. The most recent edit of a record wins.
+- Each desk numbers bookings and bills in its own series (`VV1-…`, invoices `VV-D1/26-27/0001`),
+  a separate GST series per billing counter, so numbers never clash.
+- Rooms booked for the same dates on two desks that could not sync are both kept and flagged on
+  *Today* and *Network & licences* to be resolved.
+- Windows Firewall on the admin PC must allow the app on **private networks** (TCP 47820, UDP 47821);
+  it asks the first time. Guest Wi-Fi that isolates devices will block sync — use the staff network.
+- Keep computer clocks correct (Windows does this automatically); the screen warns if a desk's
+  clock differs from the admin PC's.
+- Desks check in with the admin PC every 30 seconds. On the admin PC, *Network & licences* shows
+  each desk as **Online** or **Offline since …**, its last sync, address and version, and
+  **Sync now** (one desk) or **Sync all now**: the desk syncs at its next check-in, within 30 s.
+- *Sync history* lists every sync with who started it (schedule, *Sync now*, the admin PC, first
+  connection), changes sent and received, double bookings found, and errors. On the admin PC it
+  covers all desks; on a desk, its own syncs.
+
+### Upgrades
+
+Updates never lose data. The data file records its version; each update runs only the schema and
+data migrations it is missing, in order, once (`app/backend/src/db/schema.js`,
+`db/data-migrations.js`). Desks and the admin PC must run the same version to sync — a desk on a
+different version is told to update and keeps working on its own until then.
 
 ## Guest ID privacy
 
@@ -70,6 +113,11 @@ update, and re-activate every computer. Never commit it to git.
 - ID numbers and photos are **encrypted inside the data file** with a key protected by the admin PIN,
   so a copied database or backup reveals nothing without the PIN. The PIN cannot be recovered —
   keep it safe.
+- **On the admin PC no PIN is needed to view them**: full ID numbers, ID photos, declarations with
+  photos and the guest register open directly. Enter the admin PIN once on the admin PC after
+  loading the owner key (or after updating to this version); from then on the key is kept on that
+  computer, protected by the owner key (`vault-owner.json` beside the owner key, never in exports
+  or synced data). Removing the owner key removes it. Front desks still need the PIN.
 
 ## Printed documents
 
@@ -98,8 +146,9 @@ photos appear on that guest — encrypted, like every ID photo. No internet or a
 
 ## Updates
 
-**Check for updates** in the sidebar compares the app with the version in `package.json` on the
-`main` branch (GitHub redirects the old `master` name there). To ship a fix:
+**Check for updates** in the top bar compares the app with the version in `package.json` on the
+`main` branch (GitHub redirects the old `master` name there). The app also checks by itself every
+15 minutes and the button turns into *Update to x.y.z*. To ship a fix:
 
 1. Bump `version` in `package.json` and push to `main`.
 2. GitHub Actions tests, builds and publishes release `vX.Y.Z` with the installer (about 10 minutes).
@@ -111,17 +160,6 @@ photos appear on that guest — encrypted, like every ID photo. No internet or a
 Set the address under **Settings → Daily report email**. *Email report* on Today or Reports opens
 Gmail in the browser (where you are signed in) with the recipient, subject and report filled in —
 press Send.
-
-## Moving from version 1.x
-
-On the old computer open MongoDB Compass, connect to `localhost:27017`, open the `roomsvv`
-database and export each collection as JSON: `rooms`, `customers`, `bookings`, `settings`,
-`rateconfigs`, `mealrateconfigs`. In the new version choose all the JSON files under
-*Bring data from the old version*. The import runs only on an empty system.
-
-Guest ID photos are picked up from the old app's upload folder, so install 2.0 and run the import
-**on the same computer** the old version used. After that, use *Export data file* to move
-everything — photos included — to another computer.
 
 ## Development
 
@@ -149,6 +187,8 @@ test/                node:test suites
 ```
 
 Schema changes go in `app/backend/src/db/schema.js` as a new migration; never edit a shipped one.
+One-off data changes go in `app/backend/src/db/data-migrations.js` (append only). New tables that
+should sync between desks are added to `app/backend/src/db/sync-tables.js` in the same migration.
 
 ## Releasing
 

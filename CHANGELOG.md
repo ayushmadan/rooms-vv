@@ -5,6 +5,29 @@ All notable changes to Vira Villas Rooms will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Admin PC mode (owner key loaded): issue, register and remove licence keys; export signed licenses.json.
+- Licence revocation: keys checked every 15 minutes against licenses.json on GitHub and the admin PC;
+  7-day offline grace; removed keys lock the computer.
+- Two-way sync between front desks and the admin PC over the hotel network only (no internet):
+  pairing codes, encrypted traffic, change log with latest-edit-wins, per-desk id and GST series,
+  double-booking detection, every 15 minutes and on demand, with a top-of-window loader.
+- Check for updates in the top bar, with an automatic check every 15 minutes.
+- Data-migration framework so updates transform existing data once, in order.
+- Admin PC: live desk status (online/offline, last sync, version), *Sync now* per desk and
+  *Sync all now* (desks pick it up within 30 seconds), and a sync history on every computer.
+- Admin PC: guest ID numbers, ID photos and the guest register open without the admin PIN
+  (after the PIN has been entered once there). Front desks still need the PIN.
+
+### Changed
+- Activation keys now carry a label and issue date (older keys keep working).
+
+### Removed
+- Import from the MongoDB-based 1.x version (MongoDB Compass / mongoexport JSON). The app has no
+  MongoDB code or references left; move data between computers with *Backup & transfer*.
+
 ## [2.0.0] - 2026-10-31
 
 ### Changed

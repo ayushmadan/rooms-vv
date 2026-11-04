@@ -4,6 +4,10 @@
 // Only the private key can *open* it, and that key is stored wrapped with a key derived from the
 // admin PIN. It is held in memory only while an admin session is unlocked. A copied database or
 // backup therefore reveals no identity documents without the PIN.
+//
+// The admin PC (the computer holding the owner key) may also keep a second wrap of the private
+// key, made with a secret derived from the owner key, so identity documents open there without
+// the PIN. That wrap is stored on that computer only, never in the hotel's data.
 const crypto = require('crypto');
 const { forbidden } = require('../lib/http');
 
@@ -30,13 +34,24 @@ function pinKey(pin, salt) {
   return crypto.scryptSync(String(pin), salt, 32, SCRYPT);
 }
 
-function wrapPrivateKey(privateKey, pin) {
-  const salt = crypto.randomBytes(16);
+function wrapWithKey(privateKey, key) {
   const iv = crypto.randomBytes(IV_BYTES);
-  const cipher = crypto.createCipheriv('aes-256-gcm', pinKey(pin, salt), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const der = privateKey.export({ format: 'der', type: 'pkcs8' });
   const wrapped = Buffer.concat([cipher.update(der), cipher.final()]);
-  return { salt: salt.toString('base64'), iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), wrapped: wrapped.toString('base64') };
+  return { iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), wrapped: wrapped.toString('base64') };
+}
+
+function unwrapWithKey(wrap, key) {
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(wrap.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(wrap.tag, 'base64'));
+  const der = Buffer.concat([decipher.update(Buffer.from(wrap.wrapped, 'base64')), decipher.final()]);
+  return crypto.createPrivateKey({ key: der, format: 'der', type: 'pkcs8' });
+}
+
+function wrapPrivateKey(privateKey, pin) {
+  const salt = crypto.randomBytes(16);
+  return { salt: salt.toString('base64'), ...wrapWithKey(privateKey, pinKey(pin, salt)) };
 }
 
 function hasKeys(store) {
@@ -54,10 +69,27 @@ function createKeys(store, pin) {
 function unlock(store, pin) {
   const vault = readVault(store);
   if (!vault) return createKeys(store, pin);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', pinKey(pin, Buffer.from(vault.salt, 'base64')), Buffer.from(vault.iv, 'base64'));
-  decipher.setAuthTag(Buffer.from(vault.tag, 'base64'));
-  const der = Buffer.concat([decipher.update(Buffer.from(vault.wrapped, 'base64')), decipher.final()]);
-  unlockedKeys.set(store, crypto.createPrivateKey({ key: der, format: 'der', type: 'pkcs8' }));
+  unlockedKeys.set(store, unwrapWithKey(vault, pinKey(pin, Buffer.from(vault.salt, 'base64'))));
+}
+
+/** Wraps the unlocked private key with a 32-byte secret, for keeping on this computer only. */
+function wrapForMachine(store, secret) {
+  const vault = readVault(store);
+  const key = unlockedKeys.get(store);
+  if (!vault || !key) return null;
+  return { publicKey: vault.publicKey, ...wrapWithKey(key, secret) };
+}
+
+/** Opens the vault with a wrap from wrapForMachine. False if it belongs to other data or a different secret. */
+function unlockForMachine(store, wrap, secret) {
+  const vault = readVault(store);
+  if (!vault || !wrap || wrap.publicKey !== vault.publicKey) return false;
+  try {
+    unlockedKeys.set(store, unwrapWithKey(wrap, secret));
+    return true;
+  } catch (_err) {
+    return false;
+  }
 }
 
 /** Re-wraps the private key after a PIN change. Requires an unlocked session. */
@@ -122,7 +154,7 @@ function mask(idNumber) {
 }
 
 /**
- * Seals any identity data still stored in plain text (older installs, legacy imports).
+ * Seals any identity data still stored in plain text (installs from before encryption).
  * Needs only the public key, so it can run whenever keys exist.
  */
 function sealPlaintext(store) {
@@ -144,4 +176,4 @@ function sealPlaintext(store) {
   return { guests, files };
 }
 
-module.exports = { hasKeys, createKeys, unlock, rewrap, lock, isUnlocked, seal, open, isSealed, mask, sealPlaintext };
+module.exports = { hasKeys, createKeys, unlock, wrapForMachine, unlockForMachine, rewrap, lock, isUnlocked, seal, open, isSealed, mask, sealPlaintext };

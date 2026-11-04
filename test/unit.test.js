@@ -6,7 +6,6 @@ const { amountInWords } = require('../app/backend/src/lib/words');
 const { html, raw } = require('../app/backend/src/lib/html');
 const { computeStay, groupNightsByRent, mealsForNight } = require('../app/backend/src/services/pricing');
 const { computeTax } = require('../app/backend/src/services/folio');
-const { normalize } = require('../app/backend/src/services/legacy');
 const { toCsv } = require('../app/backend/src/services/reports');
 
 test('money: rupees convert to integer paise without float drift', () => {
@@ -84,10 +83,6 @@ test('tax: each category taxed at its own rate, inclusive and exclusive', () => 
   assert.equal(exclusive.total, 221800 + 10500 + 2124);
 });
 
-test('legacy: Extended JSON from mongoexport is normalized', () => {
-  const doc = normalize({ _id: { $oid: 'abc123' }, at: { $date: '2026-02-11T06:30:00Z' }, n: { $numberLong: '42' }, list: [{ $date: { $numberLong: '0' } }] });
-  assert.deepEqual(doc, { _id: 'abc123', at: '2026-02-11T06:30:00.000Z', n: 42, list: ['1970-01-01T00:00:00.000Z'] });
-});
 
 test('csv: quotes fields and neutralises spreadsheet formulas', () => {
   const out = toCsv([{ title: 'Name', value: (r) => r.name }], [{ name: '=HYPERLINK("x")' }, { name: 'Rao, K' }]);

@@ -69,7 +69,7 @@ jobs:
         shell: pwsh
         run: |
           $env:ELECTRON_RUN_AS_NODE = '1'
-          npx electron --test test/unit.test.js test/api.test.js test/updater.test.js test/license.test.js
+          npx electron --test test/unit.test.js test/api.test.js test/updater.test.js test/license.test.js test/sync.test.js
 
       - name: Build NSIS installer
         if: steps.exists.outputs.SKIP != 'true'

@@ -12,7 +12,7 @@ const audit = require('../services/audit');
 const vault = require('../services/vault');
 const documents = require('../services/documents');
 
-module.exports = function coreRoutes({ store, auth, license, appVersion }) {
+module.exports = function coreRoutes({ store, auth, license, sync, appVersion }) {
   const router = express.Router();
 
   router.get('/health', (_req, res) => res.json({ ok: true, version: appVersion }));
@@ -23,8 +23,10 @@ module.exports = function coreRoutes({ store, auth, license, appVersion }) {
       version: appVersion,
       setupCompleted: all.setup.completed,
       license: license.status,
+      syncRole: sync.role(),
       today: req.ctx.today(),
       isAdmin: req.ctx.isAdmin,
+      idAccess: req.ctx.canSeeIds,
       property: all.property,
       policy: all.policy,
       taxes: all.taxes,

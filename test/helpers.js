@@ -15,12 +15,16 @@ function fixedClock(iso) {
   return clock;
 }
 
-async function startApp({ now = '2026-11-02T06:30:00.000Z', setup = true, license } = {}) {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rooms-test-'));
+const offlineFetch = async () => { throw new Error('offline in tests'); };
+
+async function startApp({ now = '2026-11-02T06:30:00.000Z', setup = true, license, publicKeyPem, fetchImpl = offlineFetch, dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rooms-test-')) } = {}) {
   const clock = fixedClock(now);
   const server = createServer({
     dataDir: path.join(dataDir, 'data'), appVersion: 'test', clock, ...(license ? { license } : {}),
-    phoneCapture: { host: '127.0.0.1', port: 0 }
+    phoneCapture: { host: '127.0.0.1', port: 0 },
+    sync: { host: '127.0.0.1', port: 0, discoveryPort: null },
+    fetchImpl,
+    ...(publicKeyPem ? { publicKeyPem } : {})
   });
   const { url } = await server.listen();
   let adminToken = '';
@@ -47,6 +51,9 @@ async function startApp({ now = '2026-11-02T06:30:00.000Z', setup = true, licens
     put: (p, body, o = {}) => request('PUT', p, { ...o, body }),
     patch: (p, body, o = {}) => request('PATCH', p, { ...o, body }),
     raw: request,
+    get adminToken() {
+      return adminToken;
+    },
     async unlock() {
       const res = await request('POST', '/api/auth/unlock', { body: { pin: ADMIN_PIN } });
       adminToken = res.data.token;
@@ -64,9 +71,10 @@ async function startApp({ now = '2026-11-02T06:30:00.000Z', setup = true, licens
     if (res.status !== 200) throw new Error(`setup failed: ${JSON.stringify(res.data)}`);
   }
 
-  async function stop() {
+  /** keepData: leave the data folder so a new startApp({ dataDir }) can reopen it (a restart). */
+  async function stop({ keepData = false } = {}) {
     await server.close();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    if (!keepData) fs.rmSync(dataDir, { recursive: true, force: true });
   }
 
   return { api, url, server, clock, dataDir, stop };

@@ -8,6 +8,12 @@ function requireAdmin(req, _res, next) {
   next();
 }
 
+/** ID numbers and photos: admin PIN, or the admin PC itself. */
+function requireIdAccess(req, _res, next) {
+  if (!req.ctx.canSeeIds) return next(forbidden('Admin PIN required to view identity documents'));
+  next();
+}
+
 /** Streams a raw request body to a temp file, enforcing a size cap. Resolves to the file path. */
 function receiveFile(req, dir, maxBytes) {
   return new Promise((resolve, reject) => {
@@ -52,4 +58,4 @@ function receiveBuffer(req, maxBytes) {
   });
 }
 
-module.exports = { requireAdmin, receiveFile, receiveBuffer };
+module.exports = { requireAdmin, requireIdAccess, receiveFile, receiveBuffer };

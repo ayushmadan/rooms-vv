@@ -3,6 +3,7 @@ import { api, admin, staff } from './api.js';
 import { state, loadBootstrap } from './state.js';
 import { formDialog, field, toast, showError, val } from './ui.js';
 import { longDate } from './format.js';
+import { mountSyncStatus } from './sync-status.js';
 
 // Each view module exports render(container, params) and may return a cleanup function.
 const ROUTES = [
@@ -15,6 +16,7 @@ const ROUTES = [
   { path: 'reports', label: 'Reports', group: 'Back office', load: () => import('./views/reports.js') },
   { path: 'menu', label: 'Prices & catalogue', group: 'Back office', load: () => import('./views/menu.js') },
   { path: 'documents', label: 'Documents & printing', group: 'Back office', load: () => import('./views/documents.js') },
+  { path: 'devices', label: 'Network & licences', group: 'Back office', load: () => import('./views/devices.js') },
   { path: 'settings', label: 'Settings', group: 'Back office', load: () => import('./views/settings.js') },
   { path: 'data', label: 'Backup & transfer', group: 'Back office', load: () => import('./views/data.js') },
   // Not in the navigation:
@@ -131,19 +133,29 @@ async function checkForUpdates(button) {
     }
   });
   stop();
-  if (button) button.querySelector('.update-dot')?.remove();
+  if (button) {
+    delete button.dataset.available;
+    button.classList.remove('accent');
+    button.textContent = 'Check for updates';
+  }
 }
 
-/** Quietly looks for an update after start-up and marks the button if one is waiting. */
+const UPDATE_CHECK_FIRST_MS = 15_000;
+const UPDATE_CHECK_EVERY_MS = 15 * 60 * 1000;
+
+/** Checks GitHub for a newer version shortly after start and every 15 minutes after that. */
 function backgroundUpdateCheck(button) {
   if (!window.desktop?.checkForUpdate) return;
-  setTimeout(async () => {
+  const check = async () => {
     const result = await window.desktop.checkForUpdate().catch(() => null);
-    if (result?.ok && result.updateAvailable && result.ready) {
-      button.prepend(h('span', { class: 'update-dot', 'aria-hidden': 'true' }));
-      button.lastChild.textContent = `Update to ${result.latest}`;
+    if (result?.ok && result.updateAvailable && result.ready && !button.dataset.available) {
+      button.dataset.available = result.latest;
+      button.classList.add('accent');
+      button.textContent = `Update to ${result.latest}`;
     }
-  }, 15_000);
+  };
+  setTimeout(check, UPDATE_CHECK_FIRST_MS);
+  setInterval(check, UPDATE_CHECK_EVERY_MS);
 }
 
 // --- Shell ---------------------------------------------------------------
@@ -176,7 +188,7 @@ function buildShell() {
   });
 
   const staffName = h('strong', {}, staff.get() || '—');
-  const updateButton = h('button', { hidden: !window.desktop?.checkForUpdate, onclick: () => checkForUpdates(updateButton) }, 'Check for updates');
+  const updateButton = h('button', { class: 'small', hidden: !window.desktop?.checkForUpdate, onclick: () => checkForUpdates(updateButton).catch(showError) }, 'Check for updates');
   const search = h('input', { type: 'search', class: 'search', placeholder: 'Booking code, guest name or phone', 'aria-label': 'Find booking or guest' });
   search.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') quickFind(search.value).catch(showError);
@@ -191,13 +203,14 @@ function buildShell() {
       nav,
       h('div', { class: 'foot' },
         lockButton,
-        updateButton,
         h('div', { style: { padding: '4px 0 0' } }, `Version ${state.boot.version}`))),
     h('main', { class: 'main' },
       h('div', { class: 'topbar' },
         h('span', { class: 'date' }, longDate(state.today)),
         adminFlag,
+        mountSyncStatus(),
         h('span', { class: 'spacer' }),
+        updateButton,
         search,
         h('span', { class: 'staff' }, 'On duty ', staffName,
           h('button', { class: 'quiet small', onclick: () => askStaffName().then(() => { staffName.textContent = staff.get(); }) }, 'Change')),

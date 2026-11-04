@@ -83,6 +83,10 @@ async function send(method, path, { body, raw, retryAsAdmin = true } = {}) {
   if (res.ok) return data;
 
   const message = (data && data.message) || `Request failed (${res.status})`;
+  // This computer was locked (licence removed or overdue): show the lock screen.
+  if (res.status === 423 && !path.startsWith('/api/license')) {
+    setTimeout(() => location.reload(), 0);
+  }
   if (res.status === 403 && /admin/i.test(message) && retryAsAdmin && onAdminRequired) {
     const retry = () => send(method, path, { body, raw, retryAsAdmin: false });
     // Unlocked by another request while this one was in flight: just retry.

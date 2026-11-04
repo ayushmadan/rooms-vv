@@ -376,6 +376,19 @@ dl.pairs dd { margin: 0; }
 .qty button { min-height: 28px; padding: 0 10px; border: 0; border-radius: 0; box-shadow: none; }
 .qty span { min-width: 28px; text-align: center; font-weight: 600; }
 
+/* --- Sync indicator ------------------------------------------------------- */
+
+.sync-loader { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 100; overflow: hidden; background: rgba(212, 137, 28, .18); }
+.sync-loader > div { position: absolute; top: 0; bottom: 0; width: 35%; background: var(--brand); animation: sync-slide 1.1s ease-in-out infinite; }
+@keyframes sync-slide { from { left: -35%; } to { left: 100%; } }
+.sync-chip { min-height: 30px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; gap: 7px; box-shadow: none; background: var(--surface); }
+.sync-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--inhouse); }
+.sync-chip[data-state="busy"] i { background: var(--brand); animation: sync-pulse .9s ease-in-out infinite alternate; }
+.sync-chip[data-state="error"] { color: var(--ooo); border-color: #e6c6c6; }
+.sync-chip[data-state="error"] i { background: var(--ooo); }
+.sync-chip[data-state="done"] { background: var(--inhouse-wash); border-color: #c5e0d1; }
+@keyframes sync-pulse { from { opacity: .35; } to { opacity: 1; } }
+
 /* --- Dialogs and toasts --------------------------------------------------- */
 
 dialog {
@@ -431,6 +444,8 @@ dialog .eyebrow { margin-bottom: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  .sync-loader > div { animation: none; left: 0; width: 100%; opacity: .7; }
+  .sync-chip i { animation: none !important; }
   .board .unit:hover { transform: none; }
 }
 @media print {

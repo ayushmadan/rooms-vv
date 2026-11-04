@@ -1,3 +1,5 @@
+const { triggerSql } = require('./sync-tables');
+
 // Ordered, append-only migrations. Never edit a shipped migration; add a new one.
 // PRAGMA user_version records how many have been applied.
 const MIGRATIONS = [
@@ -301,6 +303,48 @@ const MIGRATIONS = [
   // 4: both sides of the photo ID (phone capture takes front and back).
   `
   ALTER TABLE guests ADD COLUMN id_photo_back_file_id INTEGER REFERENCES files(id);
+  `,
+  // 5: replication between devices on the hotel network (see sync/). Every write to a
+  // replicated table is logged by trigger; sync_state holds this device's node number.
+  `
+  CREATE TABLE changes (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    tbl TEXT NOT NULL,
+    row_key TEXT NOT NULL,
+    op TEXT NOT NULL CHECK (op IN ('U', 'D')),
+    at TEXT NOT NULL,
+    origin INTEGER NOT NULL
+  );
+  CREATE INDEX idx_changes_row ON changes(tbl, row_key, seq);
+  CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT);
+  INSERT INTO sync_state (key, value) VALUES ('node', '0');
+  CREATE TABLE sync_conflicts (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    tbl TEXT NOT NULL,
+    row_key TEXT NOT NULL,
+    origin INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    resolved_at TEXT
+  );
+  ${triggerSql()}
+  `,
+  // 6: sync history on each computer (local only: not in sync-tables, never replicated).
+  `
+  CREATE TABLE sync_history (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    node INTEGER NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    trigger TEXT NOT NULL DEFAULT 'schedule',
+    sent INTEGER NOT NULL DEFAULT 0,
+    received INTEGER NOT NULL DEFAULT 0,
+    conflicts INTEGER NOT NULL DEFAULT 0,
+    ok INTEGER NOT NULL DEFAULT 1,
+    error TEXT NOT NULL DEFAULT '',
+    duration_ms INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX idx_sync_history_at ON sync_history(at);
   `
 ];
 

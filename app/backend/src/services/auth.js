@@ -10,11 +10,21 @@ const LOCKOUT_MS = 60 * 1000;
 // Lets a print window (which cannot send headers) load admin-only data briefly.
 const TICKET_TTL_MS = 2 * 60 * 1000;
 
-function createAuth({ store, clock = () => Date.now() }) {
+/**
+ * @param {object} deps
+ * @param {{ remember: () => void, restore: () => void }} [deps.idAccess] keeps ID data open on the admin PC
+ */
+function createAuth({ store, clock = () => Date.now(), idAccess = { remember() {}, restore() {} } }) {
   const sessions = new Map();
   const tickets = new Map();
   let failures = 0;
   let lockedUntil = 0;
+
+  // Closing the vault re-opens it straight away on the admin PC, which may see IDs without a PIN.
+  function closeVault() {
+    vault.lock(store);
+    idAccess.restore();
+  }
 
   function unlock(pin) {
     const now = clock();
@@ -32,6 +42,7 @@ function createAuth({ store, clock = () => Date.now() }) {
     failures = 0;
     vault.unlock(store, String(pin));
     vault.sealPlaintext(store);
+    idAccess.remember();
     const token = crypto.randomBytes(32).toString('hex');
     sessions.set(token, now + SESSION_TTL_MS);
     return { token, expiresInMs: SESSION_TTL_MS };
@@ -44,7 +55,7 @@ function createAuth({ store, clock = () => Date.now() }) {
     const now = clock();
     if (!expiry || expiry < now) {
       sessions.delete(token);
-      if (!sessions.size) vault.lock(store);
+      if (expiry && !sessions.size) closeVault();
       return false;
     }
     sessions.set(token, now + SESSION_TTL_MS);
@@ -53,13 +64,13 @@ function createAuth({ store, clock = () => Date.now() }) {
 
   function lock(token) {
     sessions.delete(token);
-    if (!sessions.size) vault.lock(store);
+    if (!sessions.size) closeVault();
   }
 
   function lockAll() {
     sessions.clear();
     tickets.clear();
-    vault.lock(store);
+    closeVault();
   }
 
   function issueTicket() {

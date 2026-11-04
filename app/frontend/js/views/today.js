@@ -7,7 +7,9 @@ import { money, plural, LABELS } from '../format.js';
 
 export async function render(page) {
   loading(page);
-  const [report, units] = await Promise.all([api.get(`/api/reports/daily?date=${state.today}`), api.get('/api/units')]);
+  const [report, units, conflicts] = await Promise.all([
+    api.get(`/api/reports/daily?date=${state.today}`), api.get('/api/units'), api.get('/api/sync/conflicts').catch(() => ({ overlaps: [] }))
+  ]);
   const pendingArrivals = report.arrivals.filter((s) => s.status === 'BOOKED');
   const pendingDepartures = report.departures.filter((s) => s.status === 'CHECKED_IN');
   const inHouse = report.inHouse.filter((s) => s.status === 'CHECKED_IN');
@@ -21,6 +23,9 @@ export async function render(page) {
         h('button', { onclick: () => openPrint(`/print/daily?date=${state.today}`) }, 'Print day sheet')
       ]
     }),
+    conflicts.overlaps.length ? h('div', { class: 'notice danger', style: { marginBottom: '18px' } },
+      `${conflicts.overlaps.length} double booking${conflicts.overlaps.length > 1 ? 's' : ''} made on different desks while they were out of touch (${conflicts.overlaps.map((o) => o.unit).join(', ')}). `,
+      h('a', { href: '#/devices', style: { fontWeight: 600, textDecoration: 'underline' } }, 'Review and fix')) : null,
     h('div', { class: 'figures' },
       figure('Occupancy', `${report.rooms.occupancyPercent}%`, `${report.rooms.occupied} of ${report.rooms.total} rooms`),
       figure('In house', inHouse.length, plural(inHouse.reduce((s, x) => s + x.adults + x.children, 0), 'guest')),

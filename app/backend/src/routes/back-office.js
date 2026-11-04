@@ -7,9 +7,7 @@ const { handle, badRequest, HttpError } = require('../lib/http');
 const { requireAdmin, receiveFile } = require('./guard');
 const expenses = require('../services/expenses');
 const reports = require('../services/reports');
-const legacy = require('../services/legacy');
 const settings = require('../services/settings');
-const vault = require('../services/vault');
 
 const MAX_IMPORT_BYTES = 4 * 1024 * 1024 * 1024;
 const PENDING_IMPORT_TTL_MS = 30 * 60 * 1000;
@@ -83,16 +81,6 @@ module.exports = function backOfficeRoutes({ store, backup, auth, dataDir }) {
     } finally {
       fs.rm(file, { force: true }, () => {});
     }
-  }));
-
-  router.post('/data/legacy', adminOrFirstRun, handle((req, res) => {
-    const uploads = Array.isArray(req.body?.files) ? req.body.files : [];
-    if (!uploads.length) throw badRequest('Choose the exported .json files from the old version');
-    const collections = legacy.collectionsFromFiles(uploads.map((f) => ({ name: String(f.name || ''), buffer: Buffer.from(String(f.text || ''), 'utf8') })));
-    const summary = legacy.importCollections(req.ctx, collections);
-    vault.sealPlaintext(store);
-    if (!settings.getSection(store, 'setup').completed) settings.putSection(store, 'setup', { completed: false, legacyImported: true });
-    res.json(summary);
   }));
 
   router.get('/data/backups', requireAdmin, handle((_req, res) => res.json({ folder: backup.backupsDir, files: backup.list() })));

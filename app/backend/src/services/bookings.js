@@ -488,7 +488,25 @@ function revertStatus(ctx, id) {
   });
 }
 
+/**
+ * Bookings for the same room whose dates overlap. Can only arise when two desks book while
+ * out of touch with each other; shown to the front desk until one is moved or cancelled.
+ */
+function overlapping(store) {
+  return store.all(
+    `SELECT a.id AS aId, a.code AS aCode, b.id AS bId, b.code AS bCode, u.name AS unit,
+            MAX(a.check_in, b.check_in) AS fromDate, MIN(a.check_out, b.check_out) AS toDate,
+            ga.full_name AS aGuest, gb.full_name AS bGuest
+     FROM bookings a JOIN bookings b ON a.unit_id = b.unit_id AND a.id < b.id
+       AND a.check_in < b.check_out AND b.check_in < a.check_out
+     JOIN units u ON u.id = a.unit_id JOIN guests ga ON ga.id = a.guest_id JOIN guests gb ON gb.id = b.guest_id
+     WHERE a.status IN ('BOOKED', 'CHECKED_IN') AND b.status IN ('BOOKED', 'CHECKED_IN')
+     ORDER BY fromDate`
+  );
+}
+
 module.exports = {
+  overlapping,
   BLOCKING_STATUSES, availability, chart, list, detail, getRow, findByCode, quote, create, update,
   checkIn, checkOut, cancel, revertStatus, saveDeclaration
 };

@@ -1,7 +1,7 @@
 const express = require('express');
 const v = require('../lib/validate');
 const { handle } = require('../lib/http');
-const { requireAdmin, receiveBuffer } = require('./guard');
+const { requireAdmin, requireIdAccess, receiveBuffer } = require('./guard');
 const guests = require('../services/guests');
 const files = require('../services/files');
 const bookings = require('../services/bookings');
@@ -25,8 +25,8 @@ module.exports = function frontDeskRoutes({ store, phoneCapture }) {
     const side = v.oneOf(req.query.side, 'side', ['front', 'back'], 'front');
     res.json(guests.setIdPhoto(req.ctx, id, { name: v.text(req.query.name, 'File name', { max: 120 }), buffer }, side));
   }));
-  router.get('/guests/:id/id-number', requireAdmin, handle((req, res) => res.json({ idNumber: guests.revealIdNumber(store, v.id(req.params.id)) })));
-  router.get('/guests/:id/photo', requireAdmin, handle((req, res) => {
+  router.get('/guests/:id/id-number', requireIdAccess, handle((req, res) => res.json({ idNumber: guests.revealIdNumber(store, v.id(req.params.id)) })));
+  router.get('/guests/:id/photo', requireIdAccess, handle((req, res) => {
     const file = guests.idPhoto(store, v.id(req.params.id), v.oneOf(req.query.side, 'side', ['front', 'back'], 'front'));
     res.set({ 'Content-Type': file.mime, 'Cache-Control': 'no-store', 'Content-Disposition': 'inline' });
     res.send(Buffer.from(file.data));

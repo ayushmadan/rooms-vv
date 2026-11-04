@@ -1,8 +1,6 @@
 node_modules
 dist
 .env
-build/installers/*
-!build/installers/.gitkeep
 app/backend/uploads/*
 app/backend/output/bills/*
 app/backend/output/backups/*
@@ -11,3 +9,10 @@ app/backend/output/backups/*
 !app/backend/output/backups/.gitkeep
 .data
 license.json
+# Per-computer files the dev server writes beside its data folder (never commit the owner key)
+owner-key.pem
+*.pem
+owner-licenses.json
+vault-owner.json
+sync-hub.json
+sync-desk.json

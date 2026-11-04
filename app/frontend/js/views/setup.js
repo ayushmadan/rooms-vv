@@ -3,6 +3,7 @@ import { h, clear, append } from '../dom.js';
 import { api } from '../api.js';
 import { field, check, pickFile, showError, val } from '../ui.js';
 import { date, dateTime } from '../format.js';
+import { joinAdminPc } from '../pairing.js';
 
 export function render(root, { onDone }) {
   const wrap = h('div', { class: 'setup' });
@@ -19,10 +20,10 @@ function showChoices(wrap, onDone) {
     h('div', { class: 'choices' },
       h('button', { type: 'button', onclick: () => showFreshForm(wrap, onDone) },
         h('b', {}, 'Start fresh'), h('span', {}, 'Enter property details, taxes and an admin PIN. Rooms and tables can be changed later.')),
+      h('button', { type: 'button', onclick: () => joinAdminPc({ firstRun: true }) },
+        h('b', {}, 'Join the admin PC (front desk)'), h('span', {}, 'This desk shares bookings, guests and bills with the admin PC over the hotel network. Get a pairing code on the admin PC first.')),
       h('button', { type: 'button', onclick: () => moveFromComputer(wrap, onDone) },
-        h('b', {}, 'Move from another computer'), h('span', {}, 'Open a .vvdata file exported from Backup & transfer on the other computer.')),
-      h('button', { type: 'button', onclick: () => importLegacy(wrap, onDone) },
-        h('b', {}, 'Bring data from the old version (1.x)'), h('span', {}, 'Choose the .json files exported from MongoDB Compass: rooms, customers, bookings, settings.'))));
+        h('b', {}, 'Move from another computer'), h('span', {}, 'Open a .vvdata file exported from Backup & transfer on the other computer.'))));
 }
 
 function showFreshForm(wrap, onDone, note) {
@@ -123,19 +124,3 @@ async function moveFromComputer(wrap, onDone) {
   }
 }
 
-async function importLegacy(wrap, onDone) {
-  const files = await pickFile({ accept: '.json,application/json', multiple: true });
-  if (!files.length) return;
-  append(clear(wrap), h('div', { class: 'loading' }, 'Importing old data…'));
-  try {
-    const payload = await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })));
-    const summary = await api.post('/api/data/legacy', { files: payload });
-    showFreshForm(wrap, onDone,
-      `Imported ${summary.rooms} rooms, ${summary.guests} guests (${summary.photos} ID photos) and ${summary.bookings} bookings` +
-      `${summary.skippedBookings ? `; ${summary.skippedBookings} bookings were skipped because their room or guest was missing` : ''}. ` +
-      'Now confirm the property details and choose an admin PIN.');
-  } catch (err) {
-    showChoices(wrap, onDone);
-    showError(err);
-  }
-}

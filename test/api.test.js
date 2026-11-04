@@ -370,39 +370,6 @@ test('data: export file imports on another computer with photos intact', async (
   }
 });
 
-test('data: import from the old MongoDB version', async () => {
-  const { api, stop } = await startApp({ setup: false });
-  try {
-    const roomId = { $oid: '65c9f0000000000000000001' };
-    const customerId = { $oid: '65c9f0000000000000000002' };
-    const files = [
-      { name: 'roomsvv.rooms.json', text: JSON.stringify([{ _id: roomId, code: '101', floor: 1, size: 'BIG', active: true }]) },
-      { name: 'settings.json', text: JSON.stringify([{ key: 'GLOBAL', defaultBigRoomRent: 2500, breakfastRate: 120, gstPercent: 12 }]) },
-      { name: 'customers.json', text: JSON.stringify([{ _id: customerId, fullName: 'Old Guest', phone: '9999999999', idType: 'AADHAAR', idNumber: 'x1', photoIdPath: '/nowhere.png' }]) },
-      {
-        name: 'bookings.json',
-        text: JSON.stringify([{
-          _id: { $oid: '65c9f0000000000000000003' }, bookingCode: 'VV-260211-0007', roomId, customerId,
-          checkInDate: { $date: '2026-02-11T06:30:00.000Z' }, checkOutDate: { $date: '2026-02-13T05:30:00.000Z' },
-          status: 'CLEANED', pricingSnapshot: { nightlyBase: 2500 }, totalPaid: 5000,
-          paymentHistory: [{ amount: 1000, mode: 'UPI', type: 'ADVANCE', at: { $date: '2026-02-10T10:00:00Z' } }]
-        }])
-      }
-    ];
-    const res = await api.post('/api/data/legacy', { files });
-    assert.equal(res.status, 200, JSON.stringify(res.data));
-    assert.deepEqual(res.data, { rooms: 1, guests: 1, photos: 0, bookings: 1, skippedBookings: 0 });
-    const list = (await api.get('/api/bookings?q=VV-260211-0007')).data;
-    assert.equal(list[0].status, 'CHECKED_OUT');
-    assert.equal(list[0].checkIn, '2026-02-11');
-    assert.equal(list[0].checkOut, '2026-02-13');
-    assert.equal(list[0].total, 500000);
-    assert.equal(list[0].paid, 500000, 'missing payment history is carried over as a balance payment');
-    assert.equal((await api.post('/api/data/legacy', { files })).status, 409, 'refuses to import twice');
-  } finally {
-    await stop();
-  }
-});
 
 test('phone capture: QR session uploads both sides, encrypted, then the link dies', async () => {
   const { api, server, clock, stop } = await startApp();

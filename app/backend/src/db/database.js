@@ -1,6 +1,7 @@
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 const { MIGRATIONS, APPLICATION_ID, SCHEMA_VERSION } = require('./schema');
+const { ID_TABLES, ID_RANGE } = require('./sync-tables');
 
 function openDatabase(filePath) {
   const db = new DatabaseSync(filePath);
@@ -43,6 +44,13 @@ class Store {
   constructor(filePath) {
     this.filePath = filePath;
     this.db = openDatabase(filePath);
+    this.runDataMigrations();
+  }
+
+  /** One-off data steps for the current version (schema steps already ran in openDatabase). */
+  runDataMigrations() {
+    // Required lazily: the steps use services that themselves depend on the store.
+    require('./data-migrations').runDataMigrations(this);
   }
 
   /** Runs fn atomically; nested calls join the outer transaction. */
@@ -63,8 +71,26 @@ class Store {
     return this.db.prepare(sql).run(...params);
   }
 
+  /** This device's number on the hotel network: 0 for the admin PC or a standalone install. */
+  get nodeId() {
+    const row = this.db.prepare("SELECT value FROM sync_state WHERE key = 'node'").get();
+    return Number(row?.value || 0);
+  }
+
+  setNodeId(node) {
+    this.db.prepare("INSERT INTO sync_state (key, value) VALUES ('node', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(node));
+  }
+
+  /** Next id in this device's block (see ID_RANGE), so rows from different devices never collide. */
+  nextId(table) {
+    const base = this.nodeId * ID_RANGE;
+    const row = this.db.prepare(`SELECT MAX(id) AS max FROM ${table} WHERE id > ? AND id <= ?`).get(base, base + ID_RANGE);
+    return (row.max ?? base) + 1;
+  }
+
   /** Inserts a row from an object and returns the new id. */
   insert(table, row) {
+    if (ID_TABLES.has(table) && row.id === undefined) row = { id: this.nextId(table), ...row };
     const columns = Object.keys(row);
     const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`;
     return Number(this.db.prepare(sql).run(...columns.map((c) => row[c])).lastInsertRowid);
@@ -92,6 +118,7 @@ class Store {
     }
     fs.copyFileSync(sourcePath, this.filePath);
     this.db = openDatabase(this.filePath);
+    this.runDataMigrations();
   }
 
   close() {

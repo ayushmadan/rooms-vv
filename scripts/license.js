@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Owner's licensing tool. Keep the private key safe and out of the repository.
 //
-//   node scripts/license.js keygen               create the signing key pair (once)
-//   node scripts/license.js issue ABCD-EFGH-...  print the activation key for a machine code
+//   node scripts/license.js keygen                        create the signing key pair (once)
+//   node scripts/license.js issue ABCD-EFGH-... "Label"   print an activation key
+//
+// Day to day, issue keys in the app on the admin PC (Network & licences): keys issued there are
+// added to licenses.json automatically. Keys printed by this tool must be registered on the admin
+// PC ("Register earlier key") before you publish licenses.json, or those computers will lock.
 //
 // The private key lives at ~/.vira-villas-rooms/license-private.pem (override with
 // ROOMS_LICENSE_PRIVATE_KEY). Back it up: without it no new computer can be activated.
@@ -29,21 +33,24 @@ function keygen() {
   console.log(`Public key written to ${path.relative(process.cwd(), PUBLIC_KEY_MODULE)}.`);
 }
 
-function issue(code) {
+/** Same key format as the admin app: base64url({ m, l, i }) "." signature. */
+function issue(code, label) {
   const machineCode = String(code || '').trim().toUpperCase();
   if (!CODE_PATTERN.test(machineCode)) {
     console.error('Give the machine code shown on the activation screen, e.g. ABCD-EFGH-JKLM-NPQR');
     process.exit(1);
   }
   const privateKey = crypto.createPrivateKey(fs.readFileSync(PRIVATE_KEY_PATH));
-  const key = crypto.sign(null, Buffer.from(machineCode), privateKey).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ m: machineCode, l: String(label || 'Front desk').slice(0, 60), i: new Date().toISOString() })).toString('base64url');
+  const key = `${payload}.${crypto.sign(null, Buffer.from(payload), privateKey).toString('base64url')}`;
   console.log(`Activation key for ${machineCode}:\n\n${key}\n`);
+  console.log('Register it on the admin PC (Network & licences → Register earlier key) before publishing licenses.json.');
 }
 
-const [command, arg] = process.argv.slice(2);
+const [command, arg, label] = process.argv.slice(2);
 if (command === 'keygen') keygen();
-else if (command === 'issue') issue(arg);
+else if (command === 'issue') issue(arg, label);
 else {
-  console.log('Usage:\n  node scripts/license.js keygen\n  node scripts/license.js issue <MACHINE-CODE>');
+  console.log('Usage:\n  node scripts/license.js keygen\n  node scripts/license.js issue <MACHINE-CODE> ["Label"]');
   process.exit(command ? 1 : 0);
 }

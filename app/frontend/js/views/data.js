@@ -47,11 +47,7 @@ export async function render(page) {
           h('button', { class: 'small', onclick: () => downloadBackup(f.name) }, 'Save copy'),
           h('button', { class: 'small danger', onclick: () => restoreBackup(f, reload) }, 'Restore'))
       }
-    ], backups.files, { empty: 'No backups yet. The first automatic backup runs shortly after the app starts.' })),
-    panel('From the old version (1.x)', {},
-      h('p', {}, 'In MongoDB Compass on the old computer, open the roomsvv database and use “Export Collection” → JSON for rooms, customers, bookings, settings, rateconfigs and mealrateconfigs. Then choose all the files here.'),
-      h('p', { class: 'hint' }, 'This works only on an empty system, so nothing is duplicated.'),
-      h('button', { onclick: () => importLegacy(reload) }, 'Choose exported .json files')));
+    ], backups.files, { empty: 'No backups yet. The first automatic backup runs shortly after the app starts.' })));
 }
 
 async function exportData() {
@@ -151,15 +147,3 @@ function autoBackupPanel(backup, folder, reload) {
   return panel('Automatic backups', {}, form);
 }
 
-async function importLegacy(reload) {
-  const files = await pickFile({ accept: '.json,application/json', multiple: true });
-  if (!files.length) return;
-  try {
-    const payload = await Promise.all(files.map(async (f) => ({ name: f.name, text: await f.text() })));
-    const s = await api.post('/api/data/legacy', { files: payload });
-    toast(`Imported ${s.rooms} rooms, ${s.guests} guests, ${s.bookings} bookings`);
-    reload();
-  } catch (err) {
-    showError(err);
-  }
-}

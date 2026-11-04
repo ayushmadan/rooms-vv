@@ -1,5 +1,6 @@
 // Identity documents in the UI. Staff can add an ID photo (file or camera) and see a masked
 // number; viewing the photo or full number asks for the admin PIN.
+import { state } from './state.js';
 import { h, clear, append } from './dom.js';
 import { api, admin } from './api.js';
 import { toast, showError, compressImage, captureFromCamera, idPhotoUrl, formDialog, openPrint } from './ui.js';
@@ -99,6 +100,9 @@ function pickFile() {
   });
 }
 
+/** The admin PC sees ID documents without the PIN; front desks after unlocking admin. */
+const canSeeIds = () => admin.isUnlocked || Boolean(state.boot?.idAccess);
+
 /** Photo area for a guest: shows the photo to admin, otherwise a locked placeholder. */
 export function idPhotoBlock(guest, { canChange = true, onChanged } = {}) {
   const view = h('div');
@@ -133,7 +137,7 @@ export function idPhotoBlock(guest, { canChange = true, onChanged } = {}) {
     }
   };
   if (!sides.length) view.append(h('p', { class: 'hint' }, 'No ID photo on file.'));
-  else if (admin.isUnlocked) show();
+  else if (canSeeIds()) show();
   else view.append(h('div', { class: 'notice' }, 'ID photo on file. ', h('button', { class: 'small', onclick: show }, 'View (admin PIN)')));
 
   const save = async (blob) => {
@@ -156,18 +160,17 @@ export function idPhotoBlock(guest, { canChange = true, onChanged } = {}) {
 export function idNumberText(guest) {
   if (!guest.idType) return h('span', { class: 'money-due' }, 'Not recorded');
   const value = h('span', {}, `${guest.idType} · ${guest.idNumber}`);
-  const reveal = h('button', {
-    class: 'quiet small',
-    onclick: async () => {
-      try {
-        const { idNumber } = await api.get(`/api/guests/${guest.id}/id-number`);
-        value.textContent = `${guest.idType} · ${idNumber}`;
-        reveal.remove();
-      } catch (err) {
-        showError(err);
-      }
+  const showFull = async () => {
+    try {
+      const { idNumber } = await api.get(`/api/guests/${guest.id}/id-number`);
+      value.textContent = `${guest.idType} · ${idNumber}`;
+      reveal.remove();
+    } catch (err) {
+      showError(err);
     }
-  }, 'Show');
+  };
+  const reveal = h('button', { class: 'quiet small', onclick: showFull }, 'Show');
+  if (canSeeIds() && guest.idNumber) showFull();
   return h('span', {}, value, ' ', reveal);
 }
 
