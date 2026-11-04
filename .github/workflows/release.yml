@@ -1,13 +1,17 @@
-name: Build and Release MSI
+name: Build and release Windows installer
 
+# Every push to main whose package.json version has no release yet is built and published.
+# Installed apps compare against that version and offer the update ("Check for updates").
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.0)'
+        description: 'Version to release (e.g. 2.0.1)'
         required: true
         type: string
 
@@ -21,122 +25,68 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
-      - name: Get version
+      - name: Resolve version
         id: version
         shell: pwsh
         run: |
-          if ("${{ github.event.inputs.version }}" -ne "") {
-            $version = "${{ github.event.inputs.version }}"
-          } elseif ("${{ github.ref }}" -match "refs/tags/v(.+)") {
-            $version = $matches[1]
-          } else {
-            $pkg = Get-Content package.json | ConvertFrom-Json
-            $version = $pkg.version
-          }
+          if ("${{ github.event.inputs.version }}" -ne "") { $version = "${{ github.event.inputs.version }}" }
+          elseif ("${{ github.ref }}" -match "refs/tags/v(.+)") { $version = $matches[1] }
+          else { $version = (Get-Content package.json | ConvertFrom-Json).version }
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          echo "Building version: $version"
 
-      - name: Update package.json version
+      - name: Skip if this version is already released
+        id: exists
         shell: pwsh
-        run: |
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build MSI
-        run: npm run build:msi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "v${{ steps.version.outputs.VERSION }}" --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) { echo "SKIP=true" >> $env:GITHUB_OUTPUT; echo "v${{ steps.version.outputs.VERSION }} already released; bump the version in package.json to ship an update." }
+          else { echo "SKIP=false" >> $env:GITHUB_OUTPUT }
+          exit 0
 
-      - name: Get MSI filename
-        id: msi
+      - name: Set package version
+        if: steps.exists.outputs.SKIP != 'true'
+        run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        if: steps.exists.outputs.SKIP != 'true'
+        run: npm ci
+
+      - name: Run tests (Node)
+        if: steps.exists.outputs.SKIP != 'true'
+        run: npm test
+
+      - name: Run tests (Electron runtime)
+        if: steps.exists.outputs.SKIP != 'true'
         shell: pwsh
         run: |
-          $msiFile = Get-ChildItem -Path dist\*.msi | Select-Object -First 1
-          if ($msiFile) {
-            echo "MSI_PATH=$($msiFile.FullName)" >> $env:GITHUB_OUTPUT
-            echo "MSI_NAME=$($msiFile.Name)" >> $env:GITHUB_OUTPUT
-            echo "Found MSI: $($msiFile.Name)"
-          } else {
-            echo "Error: No MSI file found in dist/"
-            exit 1
-          }
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          npx electron --test test/unit.test.js test/api.test.js test/updater.test.js test/license.test.js test/sync.test.js
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build NSIS installer
+        if: steps.exists.outputs.SKIP != 'true'
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Create release
+        if: steps.exists.outputs.SKIP != 'true'
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
-          release_name: Vira Villas Rooms v${{ steps.version.outputs.VERSION }}
+          name: Vira Villas Rooms v${{ steps.version.outputs.VERSION }}
+          files: dist/Vira-Villas-Rooms-Setup-*.exe
           body: |
             ## Vira Villas Rooms v${{ steps.version.outputs.VERSION }}
 
-            ### Download and Install
+            Download `Vira-Villas-Rooms-Setup-${{ steps.version.outputs.VERSION }}.exe` and run it.
+            No administrator rights, internet connection or database installation is needed.
+            Installing over an older 2.x version keeps all data.
 
-            1. Download the MSI installer below
-            2. Run the installer (requires administrator privileges)
-            3. The application will:
-               - Install MongoDB automatically if not present
-               - Configure MongoDB to start on system startup
-               - Set up the application to launch at startup
-               - Create desktop and start menu shortcuts
-
-            ### Features
-
-            - Offline-first room allocation and booking system
-            - Customer management with ID verification
-            - Multi-room booking support
-            - Payment tracking (UPI, Cash, Credit/Debit cards)
-            - Bill and declaration PDF generation
-            - Automatic scheduled backups
-            - Google Drive integration for backups
-            - In-app update checking
-
-            ### System Requirements
-
-            - Windows 10/11 (64-bit)
-            - 4GB RAM minimum
-            - 500MB free disk space
-            - Internet connection for updates and Google Drive sync
-
-            ### Auto-Update
-
-            The application includes built-in update checking. Click "Check Update" in the app to check for new versions, then "Update & Restart" to install updates automatically.
-
-            ---
-
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.VERSION }}...HEAD
-          draft: false
-          prerelease: false
-
-      - name: Upload MSI to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.msi.outputs.MSI_PATH }}
-          asset_name: ${{ steps.msi.outputs.MSI_NAME }}
-          asset_content_type: application/x-msi
-
-      - name: Update latest release tag
-        shell: pwsh
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git tag -f latest
-          git push -f origin latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            Requirements: Windows 10 or 11, 64-bit, 4 GB RAM.

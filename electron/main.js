@@ -1,233 +1,220 @@
-const { app, BrowserWindow, dialog } = require('electron');
+// Desktop shell: runs the local server in-process and shows it in a locked-down window.
+// Data lives in %APPDATA%\Vira Villas Rooms\data — never in the install folder.
+const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
-const http = require('http');
+const fs = require('fs');
+const { execFileSync } = require('child_process');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, session } = require('electron');
+const { createServer } = require('../app/backend/src/server');
+const logger = require('../app/backend/src/lib/logger');
+const updater = require('./updater');
 
-let mainWindow;
-let loadingWindow;
-let backendProcess;
-let isQuitting = false;
+const PREFERRED_PORT = 47800;
+const PRELOAD = path.join(__dirname, 'preload.js');
+const ICON = path.join(__dirname, '..', 'app', 'frontend', 'assets', 'logo.png');
+const PAPER = '#f4f0e8';
+const GMAIL_COMPOSE = 'https://mail.google.com/mail/?view=cm';
 
-// Prevent multiple instances
-const gotTheLock = app.requestSingleInstanceLock();
+let server = null;
+let baseUrl = '';
+let mainWindow = null;
+let quitting = false;
 
-if (!gotTheLock) {
-  console.log('Another instance is already running. Exiting.');
+if (!app.requestSingleInstanceLock()) {
   app.quit();
-}
-
-// Focus existing window if second instance tries to start
-app.on('second-instance', () => {
-  if (mainWindow) {
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
-  }
-});
-
-function startBackend() {
-  console.log('Starting backend server...');
-  backendProcess = spawn(process.execPath, [path.join(__dirname, '..', 'app/backend/src/index.js')], {
-    stdio: 'inherit'
   });
-
-  backendProcess.on('exit', (code) => {
-    console.log(`Backend exited with code ${code}`);
-    if (!isQuitting) {
-      console.log('Restarting backend in 1 second...');
-      setTimeout(startBackend, 1000);
-    }
-  });
-
-  backendProcess.on('error', (err) => {
-    console.error('Failed to start backend:', err);
-  });
+  app.whenReady().then(start).catch(fatal);
 }
 
-function createLoadingWindow() {
-  loadingWindow = new BrowserWindow({
-    width: 400,
-    height: 300,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    }
-  });
-
-  loadingWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body {
-          margin: 0;
-          padding: 0;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          background: rgba(255, 255, 255, 0.95);
-          border-radius: 12px;
-        }
-        .container {
-          text-align: center;
-          padding: 30px;
-        }
-        .logo {
-          font-size: 48px;
-          margin-bottom: 20px;
-        }
-        h2 {
-          color: #8b6b3f;
-          margin: 0 0 10px 0;
-        }
-        p {
-          color: #5f5140;
-          margin: 5px 0;
-        }
-        .spinner {
-          border: 3px solid #f3f3f3;
-          border-top: 3px solid #8b6b3f;
-          border-radius: 50%;
-          width: 40px;
-          height: 40px;
-          animation: spin 1s linear infinite;
-          margin: 20px auto;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .status {
-          font-size: 12px;
-          color: #999;
-          margin-top: 10px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="logo">🏨</div>
-        <h2>Vira Villas Rooms</h2>
-        <p>Starting application...</p>
-        <div class="spinner"></div>
-        <p class="status">Please wait while we start MongoDB and the server</p>
-      </div>
-    </body>
-    </html>
-  `)}`);
-}
-
-function checkBackendReady(retries = 90, interval = 2000) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0;
-    const maxAttempts = retries;
-
-    const attempt = () => {
-      attempts++;
-      http.get('http://localhost:4000', (res) => {
-        console.log('Backend is ready!');
-        resolve();
-      }).on('error', (err) => {
-        if (retries > 0) {
-          const elapsed = ((maxAttempts - retries) * interval) / 1000;
-          console.log(`Backend not ready yet (${Math.floor(elapsed)}s elapsed, ${retries} retries left)...`);
-
-          // Update loading window status
-          if (loadingWindow && !loadingWindow.isDestroyed()) {
-            let status = 'Starting MongoDB and server...';
-            if (elapsed > 30) status = 'MongoDB is starting (this may take a minute)...';
-            if (elapsed > 60) status = 'Almost ready, please wait...';
-
-            loadingWindow.webContents.executeJavaScript(`
-              document.querySelector('.status').textContent = '${status}';
-            `).catch(() => {});
-          }
-
-          setTimeout(() => {
-            retries--;
-            attempt();
-          }, interval);
-        } else {
-          console.error(`Backend failed to start after ${(maxAttempts * interval) / 1000} seconds`);
-          reject(new Error('Backend failed to start. MongoDB may not be installed or port 4000 is in use.'));
-        }
-      });
-    };
-    attempt();
-  });
-}
-
-async function createWindow() {
+/** Stable per-installation-of-Windows id, readable without admin rights. */
+function readMachineId() {
   try {
-    console.log('Waiting for backend to be ready...');
-    await checkBackendReady();
-
-    console.log('Creating main window...');
-    mainWindow = new BrowserWindow({
-      width: 1280,
-      height: 860,
-      show: false,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true
-      }
-    });
-
-    mainWindow.loadURL('http://localhost:4000');
-
-    mainWindow.once('ready-to-show', () => {
-      console.log('Main window ready to show');
-      if (loadingWindow && !loadingWindow.isDestroyed()) {
-        loadingWindow.close();
-      }
-      mainWindow.show();
-    });
-
-    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-      console.error('Failed to load:', errorCode, errorDescription);
-      setTimeout(() => {
-        mainWindow.reload();
-      }, 2000);
-    });
-
-  } catch (err) {
-    console.error('Failed to start application:', err);
-    if (loadingWindow && !loadingWindow.isDestroyed()) {
-      loadingWindow.close();
+    if (process.platform === 'win32') {
+      const out = execFileSync('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { encoding: 'utf8', windowsHide: true });
+      return out.match(/MachineGuid\s+REG_SZ\s+(\S+)/i)[1];
     }
-
-    const errorDetails = err.message || 'Unknown error';
-    dialog.showErrorBox(
-      'Vira Villas Rooms - Startup Failed',
-      `The application failed to start after 3 minutes.\n\n` +
-      `Error: ${errorDetails}\n\n` +
-      `Common solutions:\n` +
-      `1. Restart your computer to clear port 4000\n` +
-      `2. Run the application as Administrator\n` +
-      `3. Check Windows Firewall settings\n` +
-      `4. Manually install MongoDB from mongodb.com\n\n` +
-      `If this persists, please contact support.\n\n` +
-      `The application will now close.`
-    );
-    app.quit();
+    if (process.platform === 'darwin') {
+      const out = execFileSync('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { encoding: 'utf8' });
+      return out.match(/"IOPlatformUUID" = "([^"]+)"/)[1];
+    }
+    return fs.readFileSync('/etc/machine-id', 'utf8').trim();
+  } catch (err) {
+    logger.warn('Could not read machine id', { error: err.message });
+    return `fallback-${os.hostname()}`;
   }
 }
 
-app.whenReady().then(() => {
-  console.log('Electron app ready');
-  createLoadingWindow();
-  startBackend();
-  createWindow();
-});
+function dataDir() {
+  return path.join(app.getPath('userData'), 'data');
+}
 
-app.on('window-all-closed', () => {
-  isQuitting = true;
-  if (backendProcess && !backendProcess.killed) {
-    backendProcess.kill();
-  }
-  if (process.platform !== 'darwin') app.quit();
+async function start() {
+  logger.configure({ dir: path.join(dataDir(), 'logs') });
+  logger.info('Starting', { version: app.getVersion(), dataDir: dataDir() });
+
+  server = createServer({ dataDir: dataDir(), appVersion: app.getVersion(), license: { required: app.isPackaged, machineId: readMachineId() } });
+  const listening = await server.listen({ port: PREFERRED_PORT }).catch((err) => {
+    if (err.code !== 'EADDRINUSE') throw err;
+    logger.warn('Preferred port busy; using a free port', { port: PREFERRED_PORT });
+    return server.listen({ port: 0 });
+  });
+  baseUrl = listening.url;
+
+  lockDownSessions();
+  registerIpc();
+  Menu.setApplicationMenu(buildMenu());
+  mainWindow = createWindow(`${baseUrl}/`, { width: 1360, height: 880, minWidth: 1024, minHeight: 680 });
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
+    mainWindow.show();
+  });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+function isOwnUrl(url) {
+  return url === baseUrl || url.startsWith(`${baseUrl}/`) || url.startsWith(`${baseUrl}?`) || url.startsWith(`${baseUrl}#`);
+}
+
+function createWindow(url, size) {
+  const win = new BrowserWindow({
+    ...size,
+    show: false,
+    backgroundColor: PAPER,
+    icon: ICON,
+    autoHideMenuBar: true,
+    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false }
+  });
+
+  // Same-origin pop-ups (print documents) open as app windows; everything else is refused.
+  win.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (!isOwnUrl(target)) return { action: 'deny' };
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        width: 980, height: 960, backgroundColor: '#e9e5dc', icon: ICON, autoHideMenuBar: true,
+        webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false }
+      }
+    };
+  });
+  win.webContents.on('will-navigate', (event, target) => {
+    if (!isOwnUrl(target)) event.preventDefault();
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logger.error('Window crashed', details);
+    if (!win.isDestroyed()) win.reload();
+  });
+  win.loadURL(url);
+  return win;
+}
+
+function lockDownSessions() {
+  // Offline desktop app: no location, notifications or other permissions.
+  // Only the camera, and only for our own pages (photographing guest IDs).
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
+    callback(permission === 'media' && isOwnUrl(details.requestingUrl || wc.getURL()) && !(details.mediaTypes || []).includes('audio'));
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) => permission === 'media' && isOwnUrl(`${origin}/`));
+  session.defaultSession.on('will-download', (item) => {
+    item.once('done', (_event, state) => logger.info('Download finished', { state, file: path.basename(item.getSavePath() || '') }));
+  });
+}
+
+function registerIpc() {
+  ipcMain.handle('pdf:save', async (event, title) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || !isOwnUrl(event.sender.getURL())) return { saved: false };
+    const safeName = String(title || 'document').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80);
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: path.join(app.getPath('documents'), `${safeName}.pdf`),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+    if (canceled || !filePath) return { saved: false };
+    const thermal = /^(KOT|Bill) /.test(safeName);
+    const pdf = await event.sender.printToPDF({
+      printBackground: true,
+      pageSize: thermal ? { width: 3.15, height: 11 } : 'A4',
+      landscape: /^Guest register/.test(safeName)
+    });
+    fs.writeFileSync(filePath, pdf);
+    shell.showItemInFolder(filePath);
+    return { saved: true };
+  });
+  ipcMain.handle('app:open-data-folder', () => shell.openPath(dataDir()));
+  ipcMain.handle('update:check', async () => {
+    try {
+      return { ok: true, ...(await updater.check(app.getVersion())) };
+    } catch (err) {
+      logger.warn('Update check failed', { error: err.message });
+      return { ok: false, message: err.message };
+    }
+  });
+  ipcMain.handle('update:install', async (event, token) => {
+    if (!server.isAdminToken(String(token || ''))) return { ok: false, message: 'Unlock admin to install updates.' };
+    if (process.platform !== 'win32') return { ok: false, message: 'Updates install automatically on Windows only.' };
+    try {
+      const info = await updater.check(app.getVersion());
+      if (!info.updateAvailable) return { ok: false, message: 'Already up to date.' };
+      if (!info.ready) return { ok: false, message: `Version ${info.latest} is still being prepared. Try again in a few minutes.` };
+      const file = await updater.download(info.installer, app.getPath('temp'), {
+        onProgress: (percent) => !event.sender.isDestroyed() && event.sender.send('update:progress', percent)
+      });
+      server.backupNow('before-update');
+      logger.info('Installing update', { from: app.getVersion(), to: info.latest });
+      updater.runInstaller(file);
+      setTimeout(() => app.quit(), 500);
+      return { ok: true, installing: info.latest };
+    } catch (err) {
+      logger.error('Update failed', { error: err.message });
+      return { ok: false, message: err.message };
+    }
+  });
+  // Opens Gmail's compose page in the default browser, where the user is signed in.
+  ipcMain.handle('app:compose-email', (_event, url) => {
+    if (!String(url).startsWith(GMAIL_COMPOSE)) return false;
+    shell.openExternal(url);
+    return true;
+  });
+}
+
+function buildMenu() {
+  const viewItems = [
+    { role: 'reload' }, { type: 'separator' },
+    { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }
+  ];
+  if (!app.isPackaged) viewItems.push({ role: 'toggleDevTools' });
+  return Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { label: 'File', submenu: [{ label: 'Open data folder', click: () => shell.openPath(dataDir()) }, { type: 'separator' }, { role: 'quit' }] },
+    { role: 'editMenu' },
+    { label: 'View', submenu: viewItems },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'Open log file', click: () => logger.file && shell.openPath(logger.file) },
+        { label: `About (version ${app.getVersion()})`, click: () => dialog.showMessageBox({ message: `Vira Villas Rooms ${app.getVersion()}`, detail: `Data folder:\n${dataDir()}` }) }
+      ]
+    }
+  ]);
+}
+
+function fatal(err) {
+  logger.error('Startup failed', { error: err.stack || err.message });
+  dialog.showErrorBox('Vira Villas Rooms could not start', `${err.message}\n\nDetails were written to:\n${logger.file || dataDir()}`);
+  app.exit(1);
+}
+
+app.on('window-all-closed', () => app.quit());
+
+app.on('before-quit', (event) => {
+  if (quitting || !server) return;
+  event.preventDefault();
+  quitting = true;
+  server.close().catch((err) => logger.error('Shutdown error', { error: err.message })).finally(() => app.quit());
 });
